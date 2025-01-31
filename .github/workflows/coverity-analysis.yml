@@ -40,6 +40,7 @@ jobs:
           echo "Coverity Tool installed successfully"
       - name: Build with Coverity
         run: |
+          sudo apt-get update
           sudo apt install -y meson ninja-build nasm ffmpeg libsdl2-2.0-0 libsdl2-dev libavcodec-dev libavdevice-dev libavformat-dev libavutil-dev libswresample-dev libusb-1.0-0 libusb-1.0-0-dev libv4l-dev
           coverity_tool/bin/cov-build --dir cov-int ./install_release.sh
       - name: Compress with bzip2
