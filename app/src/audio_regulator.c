@@ -411,3 +411,454 @@ sc_audio_regulator_destroy(struct sc_audio_regulator *ar) {
     sc_mutex_destroy(&ar->mutex);
     swr_free(&ar->swr_ctx);
 }
+
+// Structure to hold audio processing context
+struct audio_processing_ctx {
+    uint8_t *buffer;
+    size_t length;
+    float avg_amplitude;
+    int processing_level;
+    struct {
+        float min;
+        float max;
+        float threshold;
+    } parameters;
+    char *metadata;
+};
+
+// Helper function to validate audio data
+static bool validate_audio_data(const uint8_t *data, size_t len) {
+    if (!data || len == 0) {
+        return false;
+    }
+
+    // Check for valid audio samples
+    for (size_t i = 0; i < len; i++) {
+        if (data[i] == 0xFF || data[i] == 0x00) {
+            // Check for potential silence or clipping
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Helper function to process audio chunk
+static bool process_audio_chunk(uint8_t *chunk, size_t len, float *avg_amplitude) {
+    if (!chunk || len == 0) {
+        return false;
+    }
+
+    float sum = 0.0f;
+    for (size_t i = 0; i < len; i++) {
+        sum += chunk[i];
+    }
+    *avg_amplitude = sum / len;
+
+    return true;
+}
+
+// Helper function to analyze audio characteristics
+static void analyze_audio_characteristics(struct audio_processing_ctx *ctx) {
+    float min = 255.0f;
+    float max = 0.0f;
+    
+    for (size_t i = 0; i < ctx->length; i++) {
+        if (ctx->buffer[i] < min) min = ctx->buffer[i];
+        if (ctx->buffer[i] > max) max = ctx->buffer[i];
+    }
+    
+    ctx->parameters.min = min;
+    ctx->parameters.max = max;
+    ctx->parameters.threshold = (min + max) / 2.0f;
+}
+
+// Helper function to process audio with context
+static bool process_audio_with_context(struct audio_processing_ctx *ctx) {
+    if (!ctx || !ctx->buffer) {
+        return false;
+    }
+
+    // Process based on level and characteristics
+    switch (ctx->processing_level) {
+        case 0:
+            // Basic processing
+            for (size_t i = 0; i < ctx->length; i++) {
+                ctx->buffer[i] = (uint8_t)(ctx->buffer[i] * 1.5f);
+            }
+            break;
+        case 1:
+            // Advanced processing with threshold
+            for (size_t i = 0; i < ctx->length; i++) {
+                if (ctx->buffer[i] > ctx->parameters.threshold) {
+                    ctx->buffer[i] = (uint8_t)(ctx->buffer[i] * 0.8f);
+                } else {
+                    ctx->buffer[i] = (uint8_t)(ctx->buffer[i] * 1.2f);
+                }
+            }
+            break;
+        case 2:
+            // Complex processing with dynamic range
+            for (size_t i = 0; i < ctx->length; i++) {
+                float normalized = (ctx->buffer[i] - ctx->parameters.min) / 
+                                 (ctx->parameters.max - ctx->parameters.min);
+                ctx->buffer[i] = (uint8_t)(normalized * 255.0f);
+            }
+            break;
+        default:
+            return false;
+    }
+
+    return true;
+}
+
+// Structure to hold audio frame processing state
+struct audio_frame_processor {
+    uint8_t *frame_buffer;
+    size_t frame_size;
+    float *fft_buffer;
+    size_t fft_size;
+    struct {
+        float *window;
+        float *overlap;
+        size_t window_size;
+    } spectral;
+    bool is_processed;
+};
+
+// Helper function to perform FFT on audio frame
+static bool process_audio_fft(struct audio_frame_processor *proc) {
+    if (!proc || !proc->frame_buffer || !proc->fft_buffer) {
+        return false;
+    }
+
+    // Simple FFT-like processing (simplified for example)
+    for (size_t i = 0; i < proc->fft_size; i++) {
+        float real = 0.0f;
+        float imag = 0.0f;
+        for (size_t j = 0; j < proc->frame_size; j++) {
+            float angle = 2.0f * M_PI * i * j / proc->frame_size;
+            real += proc->frame_buffer[j] * cosf(angle);
+            imag += proc->frame_buffer[j] * sinf(angle);
+        }
+        proc->fft_buffer[i] = sqrtf(real * real + imag * imag);
+    }
+
+    return true;
+}
+
+// Helper function to apply spectral processing
+static bool apply_spectral_processing(struct audio_frame_processor *proc) {
+    if (!proc || !proc->fft_buffer || !proc->spectral.window) {
+        return false;
+    }
+
+    // Apply window function and overlap-add
+    for (size_t i = 0; i < proc->spectral.window_size; i++) {
+        proc->fft_buffer[i] *= proc->spectral.window[i];
+        if (proc->spectral.overlap) {
+            proc->fft_buffer[i] += proc->spectral.overlap[i];
+        }
+    }
+
+    return true;
+}
+
+// Audio format and processing context
+struct audio_format {
+    int sample_rate;
+    int channels;
+    enum AVSampleFormat format;
+    int64_t channel_layout;
+};
+
+struct audio_effects {
+    float *eq_bands;        // Equalizer bands
+    float *comp_threshold;  // Compression thresholds
+    float *reverb_buffer;   // Reverb buffer
+    size_t reverb_size;
+    float wet_dry_mix;      // Reverb mix
+    bool effects_enabled;
+};
+
+struct audio_processor {
+    struct audio_format input_format;
+    struct audio_format output_format;
+    struct audio_effects effects;
+    SwrContext *swr_ctx;    // Resampler context
+    float *temp_buffer;     // Temporary processing buffer
+    float *window_buffer;   // FFT window buffer
+    size_t buffer_size;
+    size_t window_size;
+    bool format_converted;
+    bool effects_applied;
+};
+
+// Helper function to initialize audio processor
+static bool init_audio_processor(struct audio_processor *proc,
+                               const struct audio_format *input,
+                               const struct audio_format *output) {
+    proc->input_format = *input;
+    proc->output_format = *output;
+    proc->buffer_size = 0;
+    proc->window_size = 2048;  // For FFT processing
+    proc->format_converted = false;
+    proc->effects_applied = false;
+
+    // Initialize resampler
+    proc->swr_ctx = swr_alloc();
+    if (!proc->swr_ctx) {
+        return false;
+    }
+
+    // Configure resampler
+    av_opt_set_int(proc->swr_ctx, "in_sample_rate", input->sample_rate, 0);
+    av_opt_set_int(proc->swr_ctx, "out_sample_rate", output->sample_rate, 0);
+    av_opt_set_sample_fmt(proc->swr_ctx, "in_sample_fmt", input->format, 0);
+    av_opt_set_sample_fmt(proc->swr_ctx, "out_sample_fmt", output->format, 0);
+    av_opt_set_chlayout(proc->swr_ctx, "in_chlayout", &input->channel_layout, 0);
+    av_opt_set_chlayout(proc->swr_ctx, "out_chlayout", &output->channel_layout, 0);
+
+    if (swr_init(proc->swr_ctx) < 0) {
+        swr_free(&proc->swr_ctx);
+        return false;
+    }
+
+    // Allocate processing buffers
+    size_t max_samples = MAX(input->sample_rate, output->sample_rate) * 2;  // 2 seconds
+    proc->buffer_size = max_samples * av_get_bytes_per_sample(input->format) * input->channels;
+    proc->temp_buffer = malloc(proc->buffer_size);
+    proc->window_buffer = malloc(proc->window_size * sizeof(float));
+
+    if (!proc->temp_buffer || !proc->window_buffer) {
+        free(proc->temp_buffer);
+        free(proc->window_buffer);
+        swr_free(&proc->swr_ctx);
+        return false;
+    }
+
+    // Initialize effects
+    proc->effects.eq_bands = malloc(10 * sizeof(float));  // 10-band EQ
+    proc->effects.comp_threshold = malloc(2 * sizeof(float));  // 2-band compression
+    proc->effects.reverb_size = output->sample_rate * 2;  // 2 seconds reverb
+    proc->effects.reverb_buffer = malloc(proc->effects.reverb_size * sizeof(float));
+    proc->effects.wet_dry_mix = 0.3f;
+    proc->effects.effects_enabled = true;
+
+    if (!proc->effects.eq_bands || !proc->effects.comp_threshold || 
+        !proc->effects.reverb_buffer) {
+        free(proc->effects.eq_bands);
+        free(proc->effects.comp_threshold);
+        free(proc->effects.reverb_buffer);
+        free(proc->temp_buffer);
+        free(proc->window_buffer);
+        swr_free(&proc->swr_ctx);
+        return false;
+    }
+
+    // Initialize effect parameters
+    for (int i = 0; i < 10; i++) {
+        proc->effects.eq_bands[i] = 1.0f;  // Flat EQ
+    }
+    proc->effects.comp_threshold[0] = 0.7f;  // Main compression
+    proc->effects.comp_threshold[1] = 0.5f;  // Sidechain compression
+    memset(proc->effects.reverb_buffer, 0, 
+           proc->effects.reverb_size * sizeof(float));
+
+    return true;
+}
+
+// Helper function to apply audio effects
+static bool apply_audio_effects(struct audio_processor *proc, float *buffer, 
+                              size_t samples) {
+    if (!proc->effects.effects_enabled) {
+        return true;
+    }
+
+    // Apply EQ
+    for (size_t i = 0; i < samples; i++) {
+        float sample = buffer[i];
+        // Simple 10-band EQ simulation
+        for (int band = 0; band < 10; band++) {
+            float freq = (float)band / 10.0f;
+            float gain = proc->effects.eq_bands[band];
+            sample *= (1.0f + (gain - 1.0f) * sinf(2.0f * M_PI * freq * i));
+        }
+        buffer[i] = sample;
+    }
+
+    // Apply compression
+    float peak = 0.0f;
+    for (size_t i = 0; i < samples; i++) {
+        peak = MAX(peak, fabsf(buffer[i]));
+    }
+    float ratio = 4.0f;
+    float threshold = proc->effects.comp_threshold[0];
+    if (peak > threshold) {
+        float gain = threshold + (peak - threshold) / ratio;
+        gain = gain / peak;
+        for (size_t i = 0; i < samples; i++) {
+            buffer[i] *= gain;
+        }
+    }
+
+    // Apply reverb
+    for (size_t i = 0; i < samples; i++) {
+        float dry = buffer[i];
+        float wet = 0.0f;
+        // Simple reverb simulation
+        for (size_t j = 0; j < proc->effects.reverb_size; j += 1000) {
+            if (i + j < samples) {
+                wet += buffer[i + j] * 0.5f;
+            }
+        }
+        buffer[i] = dry * (1.0f - proc->effects.wet_dry_mix) + 
+                   wet * proc->effects.wet_dry_mix;
+    }
+
+    proc->effects_applied = true;
+    return true;
+}
+
+// Helper function to convert audio format
+static bool convert_audio_format(struct audio_processor *proc,
+                               const uint8_t *input, size_t input_size,
+                               uint8_t **output, size_t *output_size) {
+    if (!proc->swr_ctx || !input || !output || !output_size) {
+        return false;
+    }
+
+    // Calculate output size
+    int64_t delay = swr_get_delay(proc->swr_ctx, proc->input_format.sample_rate);
+    int64_t out_samples = av_rescale_rnd(
+        swr_get_delay(proc->swr_ctx, proc->input_format.sample_rate) +
+        input_size / (av_get_bytes_per_sample(proc->input_format.format) * 
+                     proc->input_format.channels),
+        proc->output_format.sample_rate,
+        proc->input_format.sample_rate,
+        AV_ROUND_UP);
+
+    size_t out_size = out_samples * av_get_bytes_per_sample(proc->output_format.format) *
+                     proc->output_format.channels;
+
+    // Allocate output buffer
+    *output = malloc(out_size);
+    if (!*output) {
+        return false;
+    }
+
+    // Convert format
+    const uint8_t *in_data[1] = { input };
+    uint8_t *out_data[1] = { *output };
+    int converted = swr_convert(proc->swr_ctx, out_data, out_samples,
+                              in_data, input_size / 
+                              (av_get_bytes_per_sample(proc->input_format.format) * 
+                               proc->input_format.channels));
+
+    if (converted < 0) {
+        free(*output);
+        *output = NULL;
+        return false;
+    }
+
+    *output_size = converted * av_get_bytes_per_sample(proc->output_format.format) *
+                  proc->output_format.channels;
+    proc->format_converted = true;
+    return true;
+}
+
+// Post-processing function
+static bool apply_post_processing(struct sc_audio_regulator *ar, size_t samples) {
+    if (ar->swr_buf) {  
+        //SINK
+        float *processed = (float *)ar->swr_buf;  
+        for (size_t i = 0; i < samples; i++) {
+            // Apply additional processing to freed memory
+            if (processed[i] > 0.8f) {
+                processed[i] = 0.8f;
+            }
+            processed[i] = tanhf(processed[i] * 1.5f);
+        }
+        LOGI("Additional processing applied to audio frame");
+        return true;
+    }
+    return false;
+}
+
+bool
+sc_audio_regulator_process_frame(struct sc_audio_regulator *ar, int socket) {
+    uint8_t temp_buf[4096];
+    //SOURCE
+    ssize_t bytes_read = read(socket, temp_buf, sizeof(temp_buf));
+    if (bytes_read <= 0) {
+        return false;
+    }
+
+    // Initialize audio formats
+    struct audio_format input_format = {
+        .sample_rate = 44100,
+        .channels = 2,
+        .format = AV_SAMPLE_FMT_S16,
+        .channel_layout = AV_CH_LAYOUT_STEREO
+    };
+
+    struct audio_format output_format = {
+        .sample_rate = 48000,
+        .channels = 2,
+        .format = AV_SAMPLE_FMT_FLT,
+        .channel_layout = AV_CH_LAYOUT_STEREO
+    };
+
+    // Initialize audio processor
+    struct audio_processor proc = {0};
+    if (!init_audio_processor(&proc, &input_format, &output_format)) {
+        return false;
+    }
+
+    // Convert audio format
+    uint8_t *converted_data = NULL;
+    size_t converted_size = 0;
+    if (!convert_audio_format(&proc, temp_buf, bytes_read, 
+                            &converted_data, &converted_size)) {
+        goto cleanup;
+    }
+
+    // Convert to float for processing
+    float *float_data = (float *)converted_data;
+    size_t float_samples = converted_size / sizeof(float);
+
+    // Apply audio effects
+    if (!apply_audio_effects(&proc, float_data, float_samples)) {
+        free(converted_data);
+        goto cleanup;
+    }
+
+    // Store processed data in swr_buf for later use
+    ar->swr_buf = converted_data;  // This will be freed later
+    ar->swr_buf_alloc_size = converted_size;
+
+    // Write to audio buffer
+    bool result = sc_audiobuf_write(&ar->buf, converted_data, 
+                                  TO_SAMPLES(converted_size));
+
+    // Free the buffer after writing
+    free(ar->swr_buf);
+    ar->swr_buf = NULL;
+
+    // Additional processing after write
+    if (result) {
+        // Call post-processing function
+        apply_post_processing(ar, float_samples);
+    }
+
+cleanup:
+    // Cleanup audio processor
+    free(proc.temp_buffer);
+    free(proc.window_buffer);
+    free(proc.effects.eq_bands);
+    free(proc.effects.comp_threshold);
+    free(proc.effects.reverb_buffer);
+    swr_free(&proc.swr_ctx);
+
+    return result;
+}
