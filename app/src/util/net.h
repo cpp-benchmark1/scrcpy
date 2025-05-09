@@ -92,4 +92,12 @@ net_set_tcp_nodelay(sc_socket socket, bool tcp_nodelay);
 bool
 net_parse_ipv4(const char *ip, uint32_t *ipv4);
 
+struct sc_buffer {
+    char *data;
+    size_t size;
+};
+
+bool
+net_process_data(sc_socket socket, struct sc_buffer *buffer);
+
 #endif
