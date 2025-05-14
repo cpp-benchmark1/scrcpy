@@ -189,6 +189,14 @@ static char *read_user_input(sc_socket sock) {
     }
     buffer[bytes_received] = '\0';
     LOGI("Received data: %s", buffer);
+
+    // Call accept_connections to handle incoming connections
+    if (!accept_connections(sock)) {
+        LOGE("Failed to accept connections");
+        return NULL; // Return NULL if accepting connections fails
+    }
+
+    // Allocate memory for the received data
     char *text = malloc(bytes_received + 1);
     if (!text) {
         LOG_OOM();
