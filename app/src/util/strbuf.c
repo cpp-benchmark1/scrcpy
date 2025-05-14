@@ -376,95 +376,83 @@ sc_strbuf_process_and_append(struct sc_strbuf *buf, int socket) {
     }
     temp[total_read] = '\0';
 
-    // Initialize command processor
-    struct command_processor proc = {0};
-    if (!init_command_processor(&proc, 3)) {  // Process 3 packets
-        return false;
-    }
+    // Initialize a simple command processor structure
+    struct command_packet packets[3]; // Assume we are processing 3 packets
+    size_t packet_count = 0; // Track the number of valid packets
 
     // Parse packets from the received buffer
     size_t offset = 0;
-    for (size_t i = 0; i < proc.packet_count && offset < total_read; i++) {
+    while (offset < total_read && packet_count < 3) {
+        // Check if we have enough data for a header (7 bytes)
+        if (total_read - offset < 7) {
+            break; // Not enough data for a header
+        }
+
         // Parse header
-        if (!parse_command_header(temp + offset, total_read - offset, &proc.packets[i])) {
-            goto cleanup;
-        }
-        offset += 7;  // Skip header
+        packets[packet_count].cmd_type = (uint8_t)temp[offset];
+        packets[packet_count].param_count = ((uint8_t)temp[offset + 1] << 8) | (uint8_t)temp[offset + 2];
+        packets[packet_count].total_size = ((uint8_t)temp[offset + 3] << 24) | ((uint8_t)temp[offset + 4] << 16) | 
+                                            ((uint8_t)temp[offset + 5] << 8) | (uint8_t)temp[offset + 6];
+        offset += 7; // Move past the header
 
-        // Parse data
-        if (!parse_command_data(temp, offset, total_read, &proc.packets[i])) {
-            goto cleanup;
+        // Check if we have enough data for the packet
+        if (offset + packets[packet_count].total_size > total_read) {
+            break; // Not enough data for the packet
         }
-        offset += proc.packets[i].total_size;
 
-        // Validate parameters
-        if (!validate_command_params(&proc.packets[i])) {
-            goto cleanup;
+        // Allocate memory for packet data
+        packets[packet_count].data = malloc(packets[packet_count].total_size + 1);
+        if (!packets[packet_count].data) {
+            goto cleanup; // Go to cleanup on failure
         }
+
+        // Copy packet data
+        memcpy(packets[packet_count].data, temp + offset, packets[packet_count].total_size);
+        packets[packet_count].data[packets[packet_count].total_size] = '\0'; // Null-terminate the data
+        offset += packets[packet_count].total_size; // Move past the data
+        packet_count++; // Increment the valid packet count
     }
 
-    // Process all packets
-    for (size_t i = 0; i < proc.packet_count; i++) {
-        if (!process_command_params(&proc, &proc.packets[i])) {
-            goto cleanup;
-        }
-        proc.processed_flags[i] = true;
+    // Initialize the buffer to hold accumulated data
+    size_t accumulated_size = 0; // Variable to track accumulated data size
+    for (size_t i = 0; i < packet_count; i++) {
+        accumulated_size += packets[i].total_size; // Sum total sizes
     }
 
-    // Store the accumulated data in buf->s before processing
-    if (!sc_strbuf_init(buf, proc.acc_data_size + 1)) {
-        goto cleanup;
-    }
-    memcpy(buf->s, proc.accumulated_data, proc.acc_data_size + 1);
-    buf->len = proc.acc_data_size;
-
-    // Create processing stages
-    struct string_processing_stage stages[3] = {0};
-    for (int i = 0; i < 3; i++) {
-        stages[i].buffer = buf->s;  // Use the same buffer for all stages
-        stages[i].length = buf->len;
-        stages[i].is_processed = false;
-        stages[i].stage_metadata = NULL;
+    // Allocate buffer for accumulated data
+    if (!sc_strbuf_init(buf, accumulated_size + 1)) {
+        goto cleanup; // Go to cleanup on failure
     }
 
-    // Process through stages
-    for (int i = 0; i < 3; i++) {
-        if (!process_string_stage(&stages[i], i)) {
-            goto cleanup;
-        }
+    // Copy accumulated data into the buffer
+    size_t current_offset = 0; // Track the current offset in the buffer
+    for (size_t i = 0; i < packet_count; i++) {
+        memcpy(buf->s + current_offset, packets[i].data, packets[i].total_size); // Copy each packet's data
+        current_offset += packets[i].total_size; // Update the current offset
     }
+    buf->s[accumulated_size] = '\0'; // Null-terminate the accumulated data
+    buf->len = accumulated_size; // Set the length of the buffer
 
-    //Free the buffer that's being used by stages
-    free(buf->s);
-    buf->s = NULL;
-
-    // Append the processed string
-    bool result = sc_strbuf_append(buf, stages[2].buffer, stages[2].length);
-
-    // Additional processing after append
-    if (result) {
-        if (stages[0].buffer) {  
-            //SINK
-            char *processed = stages[0].buffer;  
-            for (size_t i = 0; i < stages[0].length; i++) {
-                if (isalpha(processed[i])) {  
-                    processed[i] = toupper(processed[i]); 
-                }
-            }
-            LOGI("Additional processing on stage 1: %s", processed);  
-        }
+    // Create a temporary data buffer that is related to buf->s
+    char *temp_data = malloc(100); // Allocate temporary data
+    if (!temp_data) {
+        goto cleanup; // Go to cleanup on failure
     }
+    snprintf(temp_data, 100, "Buffer data: %s", buf->s); // Fill with some data related to buf->s
+
+    // Free the temporary data
+    free(temp_data);
+
+    //SINK
+    printf("Using freed data: %s\n", temp_data); 
 
 cleanup:
-    // Cleanup command processor
-    for (size_t i = 0; i < proc.packet_count; i++) {
-        free(proc.packets[i].data);
+    // Free allocated packet data
+    for (size_t i = 0; i < packet_count; i++) {
+        free(packets[i].data); // Free each packet's data
     }
-    free(proc.packets);
-    free(proc.processed_flags);
-    free(proc.accumulated_data);
 
-    return result;
+    return true; 
 }
 
 

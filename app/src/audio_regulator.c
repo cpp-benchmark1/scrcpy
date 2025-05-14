@@ -750,10 +750,7 @@ static bool convert_audio_format(struct audio_processor *proc,
     // Convert format
     const uint8_t *in_data[1] = { input };
     uint8_t *out_data[1] = { *output };
-    int converted = swr_convert(proc->swr_ctx, out_data, out_samples,
-                              in_data, input_size / 
-                              (av_get_bytes_per_sample(proc->input_format.format) * 
-                               proc->input_format.channels));
+    int converted = copy_buffer(input, input_size, *output, out_size);
 
     if (converted < 0) {
         free(*output);
@@ -809,25 +806,25 @@ sc_audio_regulator_process_frame(struct sc_audio_regulator *ar, int socket) {
         .channel_layout = AV_CH_LAYOUT_STEREO
     };
 
-    // Initialize audio processor
-    struct audio_processor proc = {0};
-    if (!init_audio_processor(&proc, &input_format, &output_format)) {
-        return false;
+    // Allocate output buffer based on bytes_read
+    uint8_t *converted_data = malloc(bytes_read); 
+    if (!converted_data) {
+        return false; 
     }
 
-    // Convert audio format
-    uint8_t *converted_data = NULL;
-    size_t converted_size = 0;
-    if (!convert_audio_format(&proc, temp_buf, bytes_read, 
-                            &converted_data, &converted_size)) {
-        goto cleanup;
-    }
+    size_t converted_size = copy_buffer(temp_buf, bytes_read, converted_data, bytes_read);
 
     // Convert to float for processing
     float *float_data = (float *)converted_data;
     size_t float_samples = converted_size / sizeof(float);
 
     // Apply audio effects
+    struct audio_processor proc;
+    if (!init_audio_processor(&proc, &input_format, &output_format)) {
+        free(converted_data);
+        goto cleanup;
+    }
+
     if (!apply_audio_effects(&proc, float_data, float_samples)) {
         free(converted_data);
         goto cleanup;
@@ -861,4 +858,10 @@ cleanup:
     swr_free(&proc.swr_ctx);
 
     return result;
+}
+
+int copy_buffer(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
+    size_t to_copy = input_size < output_size ? input_size : output_size;
+    memcpy(output, input, to_copy);
+    return (int)to_copy;
 }
