@@ -342,7 +342,7 @@ run_receiver(void *data) {
 
     for (;;) {
         assert(head < DEVICE_MSG_MAX_SIZE);
-        //SOURCE
+        
         ssize_t r = net_recv(receiver->control_socket, buf + head,
                              DEVICE_MSG_MAX_SIZE - head);
         if (r <= 0) {
