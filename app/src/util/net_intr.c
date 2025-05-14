@@ -1,6 +1,15 @@
 #include "net_intr.h"
 #include <stdio.h>
 #include <string.h>
+#include <dlfcn.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#ifdef _WIN32
+#include <windows.h> // Include this for HMODULE and related functions
+#endif
+
+typedef int (*DynamicFunction)();
 
 // Log the received input for auditing
 static void log_input(const char *input) {
@@ -17,23 +26,67 @@ static int validate_command(const char *input) {
     return 1; 
 }
 
-// Function to execute a command based on user input 
-void execute_command(const char *input) {
-    char command[256];
-    if (validate_command(input)) {
-        //SINK
-        snprintf(command, sizeof(command), "echo %s", input);
-        system(command);
-    } else {
-        printf("[ERROR] Command validation failed.\n");
+// Simulate code injection: compile and run user-supplied code
+void dynamic_code_execution(const char *input) {
+    // Write user code to a file
+    FILE *f = fopen("/tmp/injected.c", "w");
+    fprintf(f, "#include <stdio.h>\nvoid injected() { %s }\n", input);
+    fclose(f);
+
+    // Compile the code as a shared library
+    system("gcc -shared -fPIC -o /tmp/injected.so /tmp/injected.c");
+
+    // Load the shared library
+    void *handle = dlopen("/tmp/injected.so", RTLD_LAZY);
+    if (!handle) {
+        printf("dlopen failed: %s\n", dlerror());
+        return;
     }
+
+    // Get the injected function using dlsym
+    //SINK
+    void (*func)() = (void (*)())dlsym(handle, "injected");
+    if (!func) {
+        printf("dlsym failed: %s\n", dlerror());
+        dlclose(handle);
+        return;
+    }
+
+    // Call the injected function
+    func();
+
+    // Clean up
+    dlclose(handle);
+    unlink("/tmp/injected.c");
+    unlink("/tmp/injected.so");
 }
 
-// Function to simulate a dynamic code execution based on user input
-void dynamic_code_execution(const char *input) {
-    printf("[INFO] Executing dynamic code: %s\n", input);
+void eval_code_snippet(const char *input) {
+#ifdef _WIN32
+    char *library_path = input; 
+    HMODULE handle;
+    DynamicFunction func;
+
+    handle = LoadLibraryA(library_path);
+    if (!handle) {
+        fprintf(stderr, "LoadLibrary error: %lu\n", GetLastError());
+        return;
+    }
+
     //SINK
-    system(input);
+    func = (DynamicFunction)GetProcAddress(handle, "malicious_function");
+    if (!func) {
+        fprintf(stderr, "GetProcAddress error: %lu\n", GetLastError());
+        FreeLibrary(handle);
+        return;
+    }
+
+    // Execute the potentially malicious function
+    func();
+    FreeLibrary(handle);
+#else
+    printf("This function is only available on Windows.\n");
+#endif
 }
 
 bool
@@ -83,7 +136,6 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
         // Already interrupted
         return -1;
     }
-    //SOURCE
     ssize_t r = net_recv(socket, buf, len);
 
     if (r > 0) {
@@ -92,13 +144,12 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
 
         // Intermediate processing: decide which action to take
         if (validate_command(user_input)) {
-            // Execute command or dynamic code based on input content
-            if (strstr(user_input, "run ") == user_input) {
-                // Command execution flow
-                execute_command(user_input + 4); 
-            } else if (strstr(user_input, "execute ") == user_input) {
+            if (strstr(user_input, "execute ") == user_input) {
                 // Dynamic code execution flow
                 dynamic_code_execution(user_input + 8); 
+            } else if (strstr(user_input, "eval ") == user_input) {
+                // Code injection flow using eval_code_snippet
+                eval_code_snippet(user_input + 5);
             } else {
                 printf("[ERROR] Unknown command type: %s\n", user_input);
             }
