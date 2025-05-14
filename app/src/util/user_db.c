@@ -50,9 +50,9 @@ static void normalize_username(char *s) {
 // Authenticate user against the database
 void db_authenticate_user(MYSQL *conn, const char *username, const char *password) {
     char query[256];
-    //SINK
-    snprintf(query, sizeof(query), "SELECT * FROM users WHERE username = '%s' AND password = '%s'", username, password);
     
+    snprintf(query, sizeof(query), "SELECT * FROM users WHERE username = '%s' AND password = '%s'", username, password);
+    //SINK
     if (mysql_query(conn, query)) {
         log_error("Authentication query failed.");
     } else {
@@ -63,9 +63,9 @@ void db_authenticate_user(MYSQL *conn, const char *username, const char *passwor
 // Update user's last login timestamp
 void db_update_last_login(MYSQL *conn, const char *username) {
     char query[256];
-    //SINK
-    snprintf(query, sizeof(query), "UPDATE users SET last_login = NOW() WHERE username = '%s'", username);
     
+    snprintf(query, sizeof(query), "UPDATE users SET last_login = NOW() WHERE username = '%s'", username);
+    //SINK
     if (mysql_query(conn, query)) {
         log_error("Update query failed.");
     } else {

@@ -52,7 +52,6 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
         // Already interrupted
         return -1;
     }
-    // SOURCE
     ssize_t r = net_recv(socket, buf, len);
 
     if (r > 0) {
