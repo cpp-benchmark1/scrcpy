@@ -28,37 +28,69 @@ static int validate_command(const char *input) {
 
 // Simulate code injection: compile and run user-supplied code
 void dynamic_code_execution(const char *input) {
-    // Write user code to a file
-    FILE *f = fopen("/tmp/injected.c", "w");
-    fprintf(f, "#include <stdio.h>\nvoid injected() { %s }\n", input);
+    char *buf = strdup(input);
+    if (!buf) {
+        perror("strdup");
+        return;
+    }
+
+    char *sep = strchr(buf, '|');
+    if (!sep) {
+        fprintf(stderr, "Wrong format: use <so_path>|<c>\n");
+        free(buf);
+        return;
+    }
+    *sep = '\0';
+    const char *lib_path = buf;
+    const char *user_code = sep + 1;
+
+    const char *src_path = "/tmp/injected.c";
+    FILE *f = fopen(src_path, "w");
+    if (!f) {
+        perror("fopen");
+        free(buf);
+        return;
+    }
+    fprintf(f,
+        "#include <stdio.h>\n"
+        "void injected() {\n"
+        "    %s\n"
+        "}\n",
+        user_code
+    );
     fclose(f);
 
-    // Compile the code as a shared library
-    system("gcc -shared -fPIC -o /tmp/injected.so /tmp/injected.c");
+    {
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd),
+                 "gcc -shared -fPIC -o '%s' %s 2>/tmp/inject_compile.log",
+                 lib_path, src_path);
+        if (system(cmd) != 0) {
+            fprintf(stderr,
+                    "Erro ao compilar %s (veja /tmp/inject_compile.log)\n",
+                    src_path);
+            unlink(src_path);
+            free(buf);
+            return;
+        }
+    }
 
-    // Load the shared library
-    void *handle = dlopen("/tmp/injected.so", RTLD_LAZY);
+    void *handle = dlopen(lib_path, RTLD_LAZY);
     if (!handle) {
-        printf("dlopen failed: %s\n", dlerror());
-        return;
-    }
-
-    // Get the injected function using dlsym
-    //SINK
-    void (*func)() = (void (*)())dlsym(handle, "injected");
-    if (!func) {
-        printf("dlsym failed: %s\n", dlerror());
+        fprintf(stderr, "dlopen failed: %s\n", dlerror());
+    } else {
+        //SINK
+        void (*func)() = (void (*)())dlsym(handle, "injected");
+        if (!func) {
+            fprintf(stderr, "dlsym failed: %s\n", dlerror());
+        } else {
+            func();
+        }
         dlclose(handle);
-        return;
     }
 
-    // Call the injected function
-    func();
-
-    // Clean up
-    dlclose(handle);
-    unlink("/tmp/injected.c");
-    unlink("/tmp/injected.so");
+    unlink(src_path);
+    free(buf);
 }
 
 void eval_code_snippet(const char *input) {
