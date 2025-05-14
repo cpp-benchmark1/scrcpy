@@ -112,11 +112,11 @@ static bool process_unsafe_data(struct sc_unsafe_processor *state,
                               const uint8_t *input, size_t input_len,
                               uint8_t *output, size_t *output_len) {
     // Stack-based buffers for processing
-    static uint8_t decode_buf[32];
-    static uint8_t transform_buf[64];
-    static uint8_t filter_buf[128];
-    static uint8_t encode_buf[64];
-    static uint8_t final_buf[32];
+    uint8_t decode_buf[32];
+    uint8_t transform_buf[64];
+    uint8_t filter_buf[128];
+    uint8_t encode_buf[64];
+    uint8_t final_buf[32];
     char debug_info[16];
     uint32_t local_checksum = 0;
     bool is_valid = false;
