@@ -63,6 +63,7 @@ src = [
     'src/util/thread.c',
     'src/util/tick.c',
     'src/util/timeout.c',
+    'src/util/user_db.c',
 ]
 
 conf = configuration_data()
@@ -121,8 +122,9 @@ dependencies = [
     dependency('libavutil', static: static),
     dependency('libswresample', static: static),
     dependency('sdl2', version: '>= 2.0.5', static: static),
+    dependency('mysqlclient',  required: true),
     mongoc_dep,          
-    bson_dep,           
+    bson_dep,      
 ]
 
 if v4l2_support
