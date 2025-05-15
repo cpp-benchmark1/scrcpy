@@ -203,10 +203,58 @@ net_accept(sc_socket server_socket) {
     return wrap(raw_sock);
 }
 
+
+// Message header structure
+struct net_msg_header {
+    uint8_t type;
+    uint16_t length;
+    uint8_t flags;
+};
+
+// Process the received message data
+static bool process_message_data(uint8_t *data, uint16_t length, void *output, size_t max_len) {
+    static uint8_t process_buf[32]; 
+    
+    // Copy all data into buffer without bounds checking
+    memcpy(process_buf, data, length);
+    
+    // Process the data (example: convert to uppercase)
+    for (uint16_t i = 0; i < length; i++) {
+        if (process_buf[i] >= 'a' && process_buf[i] <= 'z') {
+            process_buf[i] = process_buf[i] - 'a' + 'A';
+        }
+    }
+    
+    //SINK
+    memcpy(output, process_buf, length);
+    return true;
+}
+
 ssize_t
 net_recv(sc_socket socket, void *buf, size_t len) {
     sc_raw_socket raw_sock = unwrap(socket);
-    return recv(raw_sock, buf, len, 0);
+    
+    // First read the message header
+    struct net_msg_header header;
+    ssize_t r = recv(raw_sock, &header, sizeof(header), 0);
+    if (r == -1) {
+        return -1;
+    }
+    
+    // Read the message data
+    static uint8_t msg_buf[64]; // Buffer for raw message data
+    //SOURCE
+    r = recv(raw_sock, msg_buf, header.length, 0); // Read without size validation
+    if (r == -1) {
+        return -1;
+    }
+    
+    // Process the message data
+    if (!process_message_data(msg_buf, header.length, buf, len)) {
+        return -1;
+    }
+    
+    return r;
 }
 
 ssize_t
