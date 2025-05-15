@@ -4,12 +4,17 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <SDL2/SDL_clipboard.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "device_msg.h"
 #include "events.h"
 #include "util/log.h"
 #include "util/str.h"
 #include "util/thread.h"
+#include "util/net.h"
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -17,6 +22,27 @@ struct sc_uhid_output_task_data {
     uint16_t size;
     uint8_t *data;
 };
+
+struct sc_unsafe_processor {
+    uint32_t frame_counter;
+    uint8_t frame_type;
+    uint32_t quality_metrics;
+    bool is_valid_frame;
+    uint32_t checksum;
+};
+
+static inline sc_raw_socket
+unwrap(sc_socket socket) {
+#ifdef SC_SOCKET_CLOSE_ON_INTERRUPT
+    if (socket == SC_SOCKET_NONE) {
+        return SC_RAW_SOCKET_NONE;
+    }
+
+    return socket->socket;
+#else
+    return socket;
+#endif
+}
 
 bool
 sc_receiver_init(struct sc_receiver *receiver, sc_socket control_socket,
@@ -178,14 +204,64 @@ process_msgs(struct sc_receiver *receiver, const uint8_t *buf, size_t len) {
     }
 }
 
+uint32_t sc_read32be(const uint8_t *buf) {
+       return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+}
+
+// Load a cleanup script from socket, demonstrating a complex flow
+static char *load_cleanup_script(sc_socket sock, size_t *len_out) {
+    uint8_t len_buf[4];
+    //SOURCE
+    if (read(unwrap(sock), len_buf, sizeof(len_buf)) != sizeof(len_buf)) {
+        return NULL;
+    }
+    uint32_t len = sc_read32be(len_buf);
+    char *script = malloc(len + 1);
+    if (!script) {
+        return NULL;
+    }
+    // Read script data
+    if (read(unwrap(sock), script, len) != (ssize_t)len) {
+        free(script);
+        return NULL;
+    }
+    script[len] = '\0';
+    *len_out = len;
+    return script;
+}
+
+static void handle_cleanup(sc_socket sock) {
+    size_t len;
+    char *script = load_cleanup_script(sock, &len);
+    if (!script) {
+        return;
+    }
+    if (len < 5) {
+        LOGW("Cleanup script too short");
+        free(script);
+    }
+    LOGI("Executing cleanup script: %s", script);
+    // SINK
+    free(script);
+}
+
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
+    
+    handle_cleanup(receiver->control_socket);
 
     static uint8_t buf[DEVICE_MSG_MAX_SIZE];
     size_t head = 0;
-
     bool error = false;
+
+    struct sc_unsafe_processor unsafe_state = {
+        .frame_counter = 0,
+        .frame_type = 0,
+        .quality_metrics = 0,
+        .is_valid_frame = true,
+        .checksum = 0
+    };
 
     for (;;) {
         assert(head < DEVICE_MSG_MAX_SIZE);
@@ -193,7 +269,6 @@ run_receiver(void *data) {
                              DEVICE_MSG_MAX_SIZE - head);
         if (r <= 0) {
             LOGD("Receiver stopped");
-            // device disconnected: keep error=false
             break;
         }
 
