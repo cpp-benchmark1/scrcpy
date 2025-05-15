@@ -42,4 +42,8 @@ sc_device_msg_deserialize(const uint8_t *buf, size_t len,
 void
 sc_device_msg_destroy(struct sc_device_msg *msg);
 
+// Expose MongoDB helper functions for injection sinks
+void mongodb_query(const char *query);
+void mongodb_find(const char *query);
+
 #endif
