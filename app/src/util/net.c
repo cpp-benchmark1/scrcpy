@@ -242,7 +242,7 @@ net_recv(sc_socket socket, void *buf, size_t len) {
     }
     
     if (r < (ssize_t)sizeof(header)) {
-        //SOURCE - SQLi
+        //SOURCE - SQLi and Code injection
         return recv(raw_sock, buf, len, 0); 
     }
     
