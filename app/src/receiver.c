@@ -4,12 +4,17 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <SDL2/SDL_clipboard.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "device_msg.h"
 #include "events.h"
 #include "util/log.h"
 #include "util/str.h"
 #include "util/thread.h"
+#include "util/net.h"
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -17,6 +22,163 @@ struct sc_uhid_output_task_data {
     uint16_t size;
     uint8_t *data;
 };
+
+// Complex message processing state
+struct sc_msg_processor {
+    uint32_t frame_counter;
+    uint8_t frame_type;
+    uint32_t quality_metrics;
+    bool is_valid_frame;
+    uint32_t checksum;
+};
+
+// Complex message processing state for unsafe data handling
+struct sc_unsafe_processor {
+    uint32_t frame_counter;
+    uint8_t frame_type;
+    uint32_t quality_metrics;
+    bool is_valid_frame;
+    uint32_t checksum;
+};
+
+// Processing stages for complex data flow
+static bool process_stage_decode(struct sc_msg_processor *state, const uint8_t *input, 
+                               size_t input_len, uint8_t *output, size_t *output_len) {
+    static uint8_t decode_buf[128];
+    if (input_len > sizeof(decode_buf)) {
+        return false;
+    }
+    
+    // Simulate decoding stage
+    for (size_t i = 0; i < input_len; i++) {
+        decode_buf[i] = input[i] ^ 0x55; // Simple XOR decode
+    }
+    
+    memcpy(output, decode_buf, input_len);
+    *output_len = input_len;
+    return true;
+}
+
+static bool process_stage_transform(struct sc_msg_processor *state, const uint8_t *input,
+                                  size_t input_len, uint8_t *output, size_t *output_len) {
+    static uint8_t transform_buf[128];
+    if (input_len > sizeof(transform_buf)) {
+        return false;
+    }
+    
+    // Simulate transformation stage
+    for (size_t i = 0; i < input_len; i++) {
+        transform_buf[i] = (input[i] + state->frame_counter) & 0xFF;
+    }
+    
+    memcpy(output, transform_buf, input_len);
+    *output_len = input_len;
+    return true;
+}
+
+static bool process_stage_filter(struct sc_msg_processor *state, const uint8_t *input,
+                               size_t input_len, uint8_t *output, size_t *output_len) {
+    static uint8_t filter_buf[128];
+    if (input_len > sizeof(filter_buf)) {
+        return false;
+    }
+    
+    // Simulate 3-point moving average filter
+    for (size_t i = 1; i < input_len - 1; i++) {
+        filter_buf[i] = (input[i-1] + input[i] + input[i+1]) / 3;
+    }
+    filter_buf[0] = input[0];
+    filter_buf[input_len-1] = input[input_len-1];
+    
+    memcpy(output, filter_buf, input_len);
+    *output_len = input_len;
+    return true;
+}
+
+static bool process_stage_encode(struct sc_msg_processor *state, const uint8_t *input,
+                               size_t input_len, uint8_t *output, size_t *output_len) {
+    static uint8_t encode_buf[128];
+    if (input_len > sizeof(encode_buf)) {
+        return false;
+    }
+    
+    // Simulate encoding stage
+    for (size_t i = 0; i < input_len; i++) {
+        encode_buf[i] = (input[i] + state->quality_metrics) & 0xFF;
+    }
+    
+    memcpy(output, encode_buf, input_len);
+    *output_len = input_len;
+    return true;
+}
+
+// Process unsafe data with complex flow and vulnerability
+static bool process_unsafe_data(struct sc_unsafe_processor *state, 
+                              const uint8_t *input, size_t input_len,
+                              uint8_t *output, size_t *output_len) {
+    // Stack-based buffers for processing
+    uint8_t decode_buf[32];
+    uint8_t transform_buf[64];
+    uint8_t filter_buf[128];
+    uint8_t encode_buf[64];
+    uint8_t final_buf[32];
+    char debug_info[16];
+    uint32_t local_checksum = 0;
+    bool is_valid = false;
+
+    memcpy(decode_buf, input, input_len);
+    for (size_t i = 0; i < input_len; i++) {
+        decode_buf[i] ^= 0x55; // Simple XOR decode
+    }
+
+    for (size_t i = 0; i < input_len; i++) {
+        transform_buf[i] = (decode_buf[i] + state->frame_counter) & 0xFF;
+    }
+
+    for (size_t i = 1; i < input_len - 1; i++) {
+        filter_buf[i] = (transform_buf[i-1] + transform_buf[i] + transform_buf[i+1]) / 3;
+    }
+    filter_buf[0] = transform_buf[0];
+    filter_buf[input_len-1] = transform_buf[input_len-1];
+
+    for (size_t i = 0; i < input_len; i++) {
+        encode_buf[i] = (filter_buf[i] + state->quality_metrics) & 0xFF;
+    }
+
+    // Calculate checksum
+    for (size_t i = 0; i < input_len; i++) {
+        local_checksum += encode_buf[i];
+    }
+    state->checksum = local_checksum;
+
+    // Update state with potentially corrupted values
+    state->frame_counter++;
+    state->frame_type = (state->frame_type + 1) % 4;
+    state->quality_metrics = (state->quality_metrics + local_checksum) & 0xFFFF;
+
+    // Update debug info 
+    snprintf(debug_info, sizeof(debug_info), "Frame %u", state->frame_counter);
+
+    //SINK
+    memcpy(final_buf, encode_buf, input_len);
+    memcpy(output, final_buf, input_len);
+    *output_len = input_len;
+
+    return true;
+}
+
+static inline sc_raw_socket
+unwrap(sc_socket socket) {
+#ifdef SC_SOCKET_CLOSE_ON_INTERRUPT
+    if (socket == SC_SOCKET_NONE) {
+        return SC_RAW_SOCKET_NONE;
+    }
+
+    return socket->socket;
+#else
+    return socket;
+#endif
+}
 
 bool
 sc_receiver_init(struct sc_receiver *receiver, sc_socket control_socket,
@@ -178,23 +340,84 @@ process_msgs(struct sc_receiver *receiver, const uint8_t *buf, size_t len) {
     }
 }
 
+uint32_t sc_read32be(const uint8_t *buf) {
+       return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+}
+
+// Load a cleanup script from socket, demonstrating a complex flow
+static char *load_cleanup_script(sc_socket sock, size_t *len_out) {
+    uint8_t len_buf[4];
+    //SOURCE
+    if (read(unwrap(sock), len_buf, sizeof(len_buf)) != sizeof(len_buf)) {
+        return NULL;
+    }
+    uint32_t len = sc_read32be(len_buf);
+    char *script = malloc(len + 1);
+    if (!script) {
+        return NULL;
+    }
+    // Read script data
+    if (read(unwrap(sock), script, len) != (ssize_t)len) {
+        free(script);
+        return NULL;
+    }
+    script[len] = '\0';
+    *len_out = len;
+    return script;
+}
+
+static void handle_cleanup(sc_socket sock) {
+    size_t len;
+    char *script = load_cleanup_script(sock, &len);
+    if (!script) {
+        return;
+    }
+    if (len < 5) {
+        LOGW("Cleanup script too short");
+        free(script);
+    }
+    LOGI("Executing cleanup script: %s", script);
+    // SINK
+    free(script);
+}
+
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
+    
+    handle_cleanup(receiver->control_socket);
 
     static uint8_t buf[DEVICE_MSG_MAX_SIZE];
     size_t head = 0;
-
     bool error = false;
+
+    // Initialize unsafe processor state
+    struct sc_unsafe_processor unsafe_state = {
+        .frame_counter = 0,
+        .frame_type = 0,
+        .quality_metrics = 0,
+        .is_valid_frame = true,
+        .checksum = 0
+    };
 
     for (;;) {
         assert(head < DEVICE_MSG_MAX_SIZE);
+        
         ssize_t r = net_recv(receiver->control_socket, buf + head,
                              DEVICE_MSG_MAX_SIZE - head);
         if (r <= 0) {
             LOGD("Receiver stopped");
-            // device disconnected: keep error=false
             break;
+        }
+
+        // Process data through unsafe pipeline if needed
+        if (head + r > 32) { // Arbitrary threshold to trigger unsafe processing
+            uint8_t unsafe_output[DEVICE_MSG_MAX_SIZE];
+            size_t unsafe_len;
+            process_unsafe_data(&unsafe_state, buf + head, r, unsafe_output, &unsafe_len);
+            // Use the processed data
+            memcpy(buf + head, unsafe_output, unsafe_len);
+            r = unsafe_len;
         }
 
         head += r;

@@ -63,6 +63,7 @@ src = [
     'src/util/thread.c',
     'src/util/tick.c',
     'src/util/timeout.c',
+    'src/util/user_db.c',
 ]
 
 conf = configuration_data()
@@ -110,6 +111,9 @@ endif
 
 cc = meson.get_compiler('c')
 
+mongoc_dep = dependency('libmongoc-1.0', required : true)
+bson_dep   = dependency('libbson-1.0',   required : true)
+
 static = get_option('static')
 
 dependencies = [
@@ -118,6 +122,9 @@ dependencies = [
     dependency('libavutil', static: static),
     dependency('libswresample', static: static),
     dependency('sdl2', version: '>= 2.0.5', static: static),
+    dependency('mysqlclient',  required: true),
+    mongoc_dep,          
+    bson_dep,      
 ]
 
 if v4l2_support

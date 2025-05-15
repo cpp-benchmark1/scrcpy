@@ -4,6 +4,10 @@
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <mysql/mysql.h>
+#include <stdio.h>
+#include <string.h>
+#include "user_db.h"
 
 #ifdef _WIN32
 #include <windows.h> // Include this for HMODULE and related functions
@@ -187,11 +191,19 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             }
         } else {
             printf("[ERROR] Invalid command input.\n");
+
+        MYSQL *conn = mysql_init(NULL);
+        if (conn && mysql_real_connect(conn, "localhost", "user", "password", "database", 0, NULL, 0)) {
+            // Dataflow: pass to user_db.c
+            process_user_input(conn, user_input);
+            mysql_close(conn);
+
         }
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
     return r;
+    }
 }
 
 ssize_t
