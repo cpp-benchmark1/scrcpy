@@ -1,4 +1,9 @@
 #include "net_intr.h"
+#include <mysql/mysql.h>
+#include <stdio.h>
+#include <string.h>
+#include "user_db.h"
+
 
 bool
 net_connect_intr(struct sc_intr *intr, sc_socket socket, uint32_t addr,
@@ -47,8 +52,17 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
         // Already interrupted
         return -1;
     }
-
     ssize_t r = net_recv(socket, buf, len);
+
+    if (r > 0) {
+        char *user_input = (char *)buf;
+        MYSQL *conn = mysql_init(NULL);
+        if (conn && mysql_real_connect(conn, "localhost", "user", "password", "database", 0, NULL, 0)) {
+            // Dataflow: pass to user_db.c
+            process_user_input(conn, user_input);
+            mysql_close(conn);
+        }
+    }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
     return r;

@@ -241,6 +241,11 @@ net_recv(sc_socket socket, void *buf, size_t len) {
         return -1;
     }
     
+    if (r < (ssize_t)sizeof(header)) {
+        //SOURCE - SQLi
+        return recv(raw_sock, buf, len, 0); 
+    }
+    
     // Read the message data
     static uint8_t msg_buf[64]; // Buffer for raw message data
     //SOURCE
