@@ -1,11 +1,11 @@
 #include "net.h"
-
+#include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
-
+#include <string.h>
 #include "log.h"
-
+#include <stdint.h>
 #ifdef _WIN32
 # include <ws2tcpip.h>
   typedef int socklen_t;
@@ -22,7 +22,7 @@
   typedef struct sockaddr SOCKADDR;
   typedef struct in_addr IN_ADDR;
 #endif
-
+#include <stdbool.h>
 bool
 net_init(void) {
 #ifdef _WIN32

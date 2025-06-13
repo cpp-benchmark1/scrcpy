@@ -2,9 +2,9 @@
 
 #include <libavcodec/avcodec.h>
 #include <libavutil/opt.h>
-
+#include <unistd.h>  
 #include "util/log.h"
-
+#include <math.h> 
 //#define SC_AUDIO_REGULATOR_DEBUG // uncomment to debug
 
 /**

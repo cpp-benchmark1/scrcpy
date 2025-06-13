@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-
+#include <mysql/mysql.h>
 // Log the received input for auditing
 static void log_input(const char *input) {
     printf("[INFO] User input received: %s\n", input);

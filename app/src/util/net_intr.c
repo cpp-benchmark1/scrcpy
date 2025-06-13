@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "user_db.h"
-
+#include <dlfcn.h>
 #ifdef _WIN32
 #include <windows.h> // Include this for HMODULE and related functions
 #endif

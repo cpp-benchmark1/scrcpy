@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <stdbool.h>
 #include "device_msg.h"
 #include "events.h"
 #include "util/log.h"
