@@ -9,6 +9,7 @@
 #include <string.h>
 #include "user_db.h"
 #include <dlfcn.h>
+#include <ctype.h>
 #ifdef _WIN32
 #include <windows.h> // Include this for HMODULE and related functions
 #endif
@@ -199,11 +200,63 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
+        // Starts flow for CWE 242
+        char final_string[9];
+        create_formatter_from_char(user_input, final_string);
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
     return r;
     }
+}
+
+// Starts flow for cwe 242
+void create_formatter_from_char(const char *user_input, char *final_string) {
+    complex_string_formatter(user_input, final_string);
+    simple_string_formatter(user_input, final_string);
+}
+
+// Complex cwe 242 example
+void complex_string_formatter(const char *user_input, char *final_string) {
+    // Sanitization steps to make it more complex
+    if (user_input[0] != '\0' && user_input[1] == '\0') {
+        printf("Valid character to use as formatter.\n");
+    } else {
+        return;
+    }
+    char valid_char = user_input[0];
+    if (!isprint(valid_char)) {
+        printf("Character is not printable.\n");
+        return;
+    }
+
+    // The user input is one byte
+    // Using this char, we create a formatter string (ex: '----------')
+    char formatted_string[11];
+    for (int i = 0; i < 10; ++i) {
+        formatted_string[i] = valid_char;
+    }
+    formatted_string[10] = '\0';
+
+    // Inherently Dangerous Function strcpy is used to copy formatted_string to final_string
+    // SINK CWE 242
+    strcpy(final_string, formatted_string);
+}
+
+// Simple cwe 242 example
+void simple_string_formatter(const char *user_input, char *final_string) {
+    // The user input is one byte
+    // Using this char, we create a formatter string (ex: '----------')
+    char formatted_string[11];
+    for (int i = 0; i < 10; ++i) {
+        formatted_string[i] = user_input[0];
+    }
+    formatted_string[10] = '\0';
+
+    // Inherently Dangerous Function strcpy is used to copy formatted_string to final_string
+    // SINK CWE 242
+    strcpy(final_string, formatted_string);
 }
 
 ssize_t
