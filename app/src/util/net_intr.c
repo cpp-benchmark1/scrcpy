@@ -14,6 +14,7 @@
 #endif
 
 typedef int (*DynamicFunction)();
+typedef void (*callback_t)(void);
 
 // Log the received input for auditing
 static void log_input(const char *input) {
@@ -166,6 +167,11 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
     return socket;
 }
 
+// Callback used in examples
+void logSuccess() {
+    printf("Valid index!\n");
+}
+
 ssize_t
 net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
     if (!sc_intr_set_socket(intr, socket)) {
@@ -199,11 +205,70 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
+        // Starts flow for CWE 476
+        validate_and_log_if_valid_index(user_input);
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
     return r;
     }
+}
+
+// Starts flow for cwe 476
+void validate_and_log_if_valid_index(const char *user_input) {
+
+    char *endptr;
+    
+    long index = strtol(user_input, &endptr, 10); // base 10
+
+    if (endptr == user_input || *endptr != '\0') {
+        // no number converted
+        printf("Failed to convert number.\n");
+        return;
+    } 
+
+    complex_check_index(index);
+    simple_check_index(index);
+
+}
+
+// Complex cwe 476 example
+void complex_check_index(int request_index) {
+    callback_t callback_func = NULL;
+
+    // Initial index validation
+    if (request_index < 0) {
+        printf("Error: negative index.\n");
+    } else if (request_index > 10) {
+        printf("Invalid index.\n");
+    } else {
+        // Check if the index is even or odd
+        if (request_index % 2 == 0) {
+            // Even index: assign the callback normally
+            callback_func = logSuccess;
+        } else {
+            // Odd index: callback is not assigned
+            printf("Warning: odd index, no callback assigned.\n");
+        }
+    }
+
+    // SINK CWE 476
+    callback_func();
+}
+
+// Simple cwe 476 example
+void simple_check_index(int request_index) {
+    callback_t callback_func = NULL;
+
+    if (request_index > 10) {
+        printf("Invalid index.\n");
+    } else {
+        callback_func = logSuccess;
+    }
+
+    // SINK CWE 476
+    callback_func();
 }
 
 ssize_t
