@@ -128,6 +128,7 @@ void eval_code_snippet(const char *input) {
 // Function used in examples
 // Doing the validation in this function just to add an extra step and make the code more complex
 int is_allocation_safe(unsigned int count, size_t element_size) {
+    // SINK CWE 190
     size_t alloc_size = count * element_size;
 
     // Naive check (same logic as before)
@@ -146,6 +147,7 @@ int* complex_configure_connection_pool(char *input, unsigned int *out_num_connec
     // For example:
     // num_connections = 4294967295
     // alloc_size = 4294967295 * 4 = 17179869180: this wraps around to a small value
+    // SINK CWE 190
     size_t alloc_size = num_connections * sizeof(int);
 
     // Naive check: rejects obviously large allocations, but fails to detect overflow cases
@@ -180,6 +182,8 @@ int* complex_configure_connection_pool(char *input, unsigned int *out_num_connec
 // Simple cwe 190 example
 int* simple_configure_connection_pool(char *input, unsigned int *out_num_connections) {
     unsigned int num_connections = atoi(input);
+
+    // SINK CWE 190
     size_t alloc_size = num_connections * sizeof(int);
 
     int *connection_slots = (int *)malloc(alloc_size);
