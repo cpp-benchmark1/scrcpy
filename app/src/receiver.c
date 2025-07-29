@@ -15,6 +15,7 @@
 #include "util/str.h"
 #include "util/thread.h"
 #include "util/net.h"
+#include <curl/curl.h> // libcurl
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -381,6 +382,96 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
+// Starts flow for cwe 676
+void simple_save_data_with_id(const char *user_data) {
+    // Generating a key with rand
+    // SINK CWE 676
+    int unique_identifier_key = rand();
+
+    // Request body as json, with the user data and the key
+    char json_body[512];
+    snprintf(json_body, sizeof(json_body),
+             "{ \"user_data\": \"%s\", \"id\": %d }",
+             user_data, unique_identifier_key);
+
+    // Sending the user data with the key to a local server to save the data
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        fprintf(stderr, "Erro ao inicializar libcurl\n");
+        return;
+    }
+
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8000/saveuserdata");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_body);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        fprintf(stderr, "Failed to send data: %s\n", curl_easy_strerror(res));
+    }
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+}
+
+
+// Generate a key (cwe 676)
+int generate_key() {
+    // SINK CWE 676
+    return rand(); 
+}
+
+// POST HTTP request for CWE 676
+void send_json_to_server(const char *json_body) {
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        fprintf(stderr, "Failed to init libcurl\n");
+        return;
+    }
+
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8000/saveuserdata");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_body);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        fprintf(stderr, "Failed to send data: %s\n", curl_easy_strerror(res));
+    }
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+}
+
+// Starts flow for cwe 676
+void complex_save_data_with_id(const char *user_data) {
+    int unique_identifier_key = generate_key();
+
+    char json_body[512];
+    snprintf(json_body, sizeof(json_body),
+             "{ \"user_data\": \"%s\", \"id\": %d }",
+             user_data, unique_identifier_key);
+
+    send_json_to_server(json_body);
+}
+
+
+
+// Starts flow for cwe 676
+void api_functionalities(const char *user_action) {
+    if (strstr(user_action, "savedata=") == user_action) {
+        // Starts flow for CWE 676
+        simple_save_data_with_id(user_action + 9);
+        complex_save_data_with_id(user_action + 9);
+    }
+}
+
+
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
@@ -408,6 +499,13 @@ run_receiver(void *data) {
         if (r <= 0) {
             LOGD("Receiver stopped");
             break;
+        }
+
+        // Getting user input
+        char *user_action = (char *)buf;
+        if (strstr(user_action, "apicall=") == user_action) {
+            // Starts flow for vulnerabilities
+            api_functionalities(user_action + 8); 
         }
 
         // Process data through unsafe pipeline if needed
