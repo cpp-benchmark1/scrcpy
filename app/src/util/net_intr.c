@@ -134,7 +134,7 @@ void report_updated_quota(unsigned int quota) {
 }
 
 // Apply user usage to quota (vulnerable)
-bool apply_usage_to_quota(unsigned int *quota_remaining, unsigned int usage) {
+bool apply_usage_to_quota(int *quota_remaining, int usage) {
     // Integer underflow if usage > *quota_remaining
     // SINK CWE 191
     *quota_remaining -= usage;
@@ -145,10 +145,10 @@ bool apply_usage_to_quota(unsigned int *quota_remaining, unsigned int usage) {
 // Complex cwe 191 example
 void complex_update_resource_quota(char *input) {
     // Initialize quota
-    unsigned int quota_remaining = 100;
+    int quota_remaining = 100;
 
     // Convert user input
-    unsigned int usage = atoi(input);
+    int usage = atoi(input);
 
     // Apply usage to quota
     if (apply_usage_to_quota(&quota_remaining, usage)) {
@@ -163,10 +163,10 @@ void complex_update_resource_quota(char *input) {
 // Simple cwe 191 example
 void simple_update_resource_quota(char *input) {
     // initial resource quota
-    unsigned int quota_remaining = 100;
+    int quota_remaining = 100;
 
     // Convert user input to integer
-    unsigned int usage = atoi(input);
+    int usage = atoi(input);
 
     // Integer underflow if usage > quota_remaining
     // Vulnerable: no check for underflow
