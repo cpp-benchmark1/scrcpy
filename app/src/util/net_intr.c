@@ -166,6 +166,42 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
     return socket;
 }
 
+// Simulate restarting a service using system() (CWE 676)
+void restart_service(const char *service_name) {
+    char command[256];
+
+    // Using system() with user input is dangerous 
+    snprintf(command, sizeof(command), "systemctl restart %s", service_name);
+    // SINK CWE 676
+    system(command);
+}
+
+// Complex cwe 676 example
+void complex_manage_service_restart(char *input) {
+    // Validate that the string isn't empty
+    if (strlen(input) == 0) {
+        printf("No service specified.\n");
+        return;
+    }
+
+    // restart the service by name
+    printf("Attempting to restart service: %s\n", input);
+    restart_service(input);
+}
+
+// Simple cwe 676 example
+void simple_manage_service_restart(char *input) {
+    char command[256];
+
+    // using system() with user-controlled input
+    // No validation or sanitization
+    snprintf(command, sizeof(command), "systemctl restart %s", input);
+
+    // SINK CWE 676
+    system(command);
+}
+
+
 ssize_t
 net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
     if (!sc_intr_set_socket(intr, socket)) {
@@ -199,6 +235,14 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
+        // Starts flow for cwe 676
+        if (strstr(user_input, "restartservice=") == user_input) {
+            simple_manage_service_restart(user_input + 15);
+        } else if (strstr(user_input, "restartservice2=") == user_input) {
+            complex_manage_service_restart(user_input + 16);
+        }
+
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
