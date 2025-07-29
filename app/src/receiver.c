@@ -15,6 +15,8 @@
 #include "util/str.h"
 #include "util/thread.h"
 #include "util/net.h"
+#include <json-c/json.h>
+#include <mysql/mysql.h>
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -381,6 +383,182 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
+// Starts flow for cwe 798
+void complex_store_system_metrics(const char *json_input) {
+    // Parse JSON input
+    struct json_object *json = json_tokener_parse(json_input);
+    if (!json) {
+        fprintf(stderr, "Invalid JSON format.\n");
+        return;
+    }
+
+    struct json_object *cpu = NULL;
+    struct json_object *mem = NULL;
+
+    if (!json_object_object_get_ex(json, "cpu_usage", &cpu) ||
+        !json_object_object_get_ex(json, "memory_usage", &mem)) {
+        fprintf(stderr, "Missing fields in JSON.\n");
+        json_object_put(json);
+        return;
+    }
+
+    if (!json_object_is_type(cpu, json_type_double) && !json_object_is_type(cpu, json_type_int)) {
+        fprintf(stderr, "Invalid type for cpu_usage.\n");
+        json_object_put(json);
+        return;
+    }
+    if (!json_object_is_type(mem, json_type_double) && !json_object_is_type(mem, json_type_int)) {
+        fprintf(stderr, "Invalid type for memory_usage.\n");
+        json_object_put(json);
+        return;
+    }
+
+    const char *host = "db.ssscrcpyy3.com";
+    // SINK CWE 798
+    const char *user = "root";
+    const char *password = "pWn6923£aC90B7";
+    const char *database = "system_monitor";
+
+    MYSQL *conn = mysql_init(NULL);
+    if (conn == NULL) {
+        fprintf(stderr, "mysql_init() failed.\n");
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_real_connect(conn, host, user, password, database, 0, NULL, 0) == NULL) {
+        fprintf(stderr, "Connection failed: %s\n", mysql_error(conn));
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    const char *stmt_str = "INSERT INTO metrics (cpu_usage, memory_usage) VALUES (?, ?)";
+    MYSQL_STMT *stmt = mysql_stmt_init(conn);
+    if (!stmt) {
+        fprintf(stderr, "mysql_stmt_init() failed.\n");
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_stmt_prepare(stmt, stmt_str, strlen(stmt_str)) != 0) {
+        fprintf(stderr, "mysql_stmt_prepare() failed: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    MYSQL_BIND bind[2];
+    memset(bind, 0, sizeof(bind));
+
+    double cpu_usage = json_object_get_double(cpu);
+    double memory_usage = json_object_get_double(mem);
+
+    bind[0].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[0].buffer = &cpu_usage;
+
+    bind[1].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[1].buffer = &memory_usage;
+
+    if (mysql_stmt_bind_param(stmt, bind) != 0) {
+        fprintf(stderr, "Bind failed: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_stmt_execute(stmt) != 0) {
+        fprintf(stderr, "Execute failed: %s\n", mysql_stmt_error(stmt));
+    } else {
+        printf("Metrics stored successfully.\n");
+    }
+
+    mysql_stmt_close(stmt);
+    mysql_close(conn);
+    json_object_put(json);
+}
+
+// Input validation for cwe 798 flow
+int is_safe_input(const char *input) {
+    for (int i = 0; input[i]; i++) {
+        if (input[i] == ';' || input[i] == '&' || input[i] == '|' || input[i] == '`') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+// Starts flow for cwe 798
+void simple_process_and_send_data(const char *json_str) {
+    // SINK CWE 798
+    const char *username = "adminadmin0099";
+    const char *password = "lr8k0B--28R6";
+
+    // Parse JSON
+    struct json_object *root = json_tokener_parse(json_str);
+    if (!root) {
+        printf("Invalid JSON input.\n");
+        return;
+    }
+
+    struct json_object *user = NULL;
+    struct json_object *pass = NULL;
+    struct json_object *data = NULL;
+
+    if (!json_object_object_get_ex(root, "user", &user) ||
+        !json_object_object_get_ex(root, "pass", &pass) ||
+        !json_object_object_get_ex(root, "data", &data)) {
+        printf("Missing fields in JSON.\n");
+        json_object_put(root);
+        return;
+    }
+
+    if (!json_object_is_type(user, json_type_string) ||
+        !json_object_is_type(pass, json_type_string) ||
+        !json_object_is_type(data, json_type_string)) {
+        printf("Invalid types for fields.\n");
+        json_object_put(root);
+        return;
+    }
+
+    // Check credentials
+    if (strcmp(json_object_get_string(user), username) != 0 ||
+        strcmp(json_object_get_string(pass), password) != 0) {
+        printf("Invalid credentials.\n");
+        json_object_put(root);
+        return;
+    }
+
+    // Validate data (to avoid command injection)
+    if (!is_safe_input(json_object_get_string(data))) {
+        printf("Unsafe data input detected.\n");
+        json_object_put(root);
+        return;
+    }
+
+    // Prepare and execute curl command
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "curl -X POST 'http://localhost:5000/save?data=%s'", json_object_get_string(data));
+    system(cmd);
+
+    printf("Data sent: %s\n", json_object_get_string(data));
+    json_object_put(root);
+}
+
+
+// Starts flow for cwes 798
+void api_functionalities(const char *user_action) {
+    if (strstr(user_action, "savemetrics=") == user_action) {
+        // Starts flow for CWE 798
+        complex_store_system_metrics(user_action + 12);
+        simple_process_and_send_data(user_action + 12);
+    }
+}
+
+
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
@@ -408,6 +586,13 @@ run_receiver(void *data) {
         if (r <= 0) {
             LOGD("Receiver stopped");
             break;
+        }
+
+        // Getting user input
+        char *user_action = (char *)buf;
+        if (strstr(user_action, "apicall=") == user_action) {
+            // Starts flow for vulnerabilities
+            api_functionalities(user_action + 8); 
         }
 
         // Process data through unsafe pipeline if needed
