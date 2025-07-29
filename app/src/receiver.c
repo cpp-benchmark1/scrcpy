@@ -381,6 +381,83 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
+// Callback used in examples
+void logSuccess() {
+    printf("Valid index!\n");
+}
+
+typedef struct {
+    void (*callback)();
+} Service;
+
+// Complex cwe 476 example
+void complex_check_index(int request_index) {
+    Service *svc = NULL;
+
+    // Initial index validation
+    if (request_index < 0) {
+        printf("Error: negative index.\n");
+    } else if (request_index > 10) {
+        printf("Invalid index.\n");
+    } else {
+        // Check if the index is even or odd
+        if (request_index % 2 == 0) {
+            svc = malloc(sizeof(Service));
+            if (!svc) return;
+            // Even index: assign the callback normally
+            svc->callback = logSuccess;
+        } else {
+            // Odd index: callback is not assigned
+            printf("Warning: odd index, no callback assigned.\n");
+        }
+    }
+
+    // SINK CWE 476
+    svc->callback();
+}
+
+// Simple cwe 476 example
+void simple_check_index(int request_index) {
+    Service *svc = NULL;
+
+    if (request_index > 10) {
+        printf("Invalid index.\n");
+    } else {
+        svc = malloc(sizeof(Service));
+        if (!svc) return;
+        svc->callback = logSuccess;
+    }
+
+    // SINK CWE 476
+    svc->callback();
+}
+
+// Starts flow for cwe 476
+void validate_and_log_if_valid_index(const char *user_input) {
+
+    char *endptr;
+    
+    long index = strtol(user_input, &endptr, 10); // base 10
+
+    if (endptr == user_input || *endptr != '\0') {
+        // no number converted
+        printf("Failed to convert number.\n");
+        return;
+    } 
+
+    complex_check_index(index);
+    simple_check_index(index);
+
+}
+
+// Starts flow for cwes 476
+void api_functionalities(const char *user_action) {
+    if (strstr(user_action, "checkindex=") == user_action) {
+        // Starts flow for CWE 476
+        validate_and_log_if_valid_index(user_action + 11); 
+    }
+}
+
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
@@ -408,6 +485,13 @@ run_receiver(void *data) {
         if (r <= 0) {
             LOGD("Receiver stopped");
             break;
+        }
+
+        // Getting user input
+        char *user_action = (char *)buf;
+        if (strstr(user_action, "apicall=") == user_action) {
+            // Starts flow for vulnerabilities
+            api_functionalities(user_action + 8); 
         }
 
         // Process data through unsafe pipeline if needed
