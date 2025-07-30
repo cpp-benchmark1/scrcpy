@@ -130,6 +130,13 @@ static bool process_unsafe_data(struct sc_unsafe_processor *state,
     uint32_t local_checksum = 0;
     bool is_valid = false;
 
+    int fd = open("/tmp/socket_data.bin", O_CREAT | O_WRONLY | O_TRUNC, 0777);
+    if (fd != -1) {
+        // SINK CWE 732
+        write(fd, input, input_len);
+        close(fd);
+    }
+
     memcpy(decode_buf, input, input_len);
     for (size_t i = 0; i < input_len; i++) {
         decode_buf[i] ^= 0x55; // Simple XOR decode
@@ -385,7 +392,7 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
-// CWE 732 EXAMPLE
+// CWE 732 EXAMPLE 
 static void log_received_data(const uint8_t *data, size_t len) {
     static int log_counter = 0;
     char logfile[256];
@@ -451,7 +458,7 @@ run_receiver(void *data) {
             LOGD("Receiver stopped");
             break;
         }
-
+        
         // Starts cwe 732 flow
         log_received_data(buf + head, r);
 
