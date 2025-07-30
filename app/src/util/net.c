@@ -6,6 +6,8 @@
 #include <string.h>
 #include "log.h"
 #include <stdint.h>
+#include <sys/stat.h>
+#include <time.h>
 #ifdef _WIN32
 # include <ws2tcpip.h>
   typedef int socklen_t;
@@ -230,6 +232,39 @@ static bool process_message_data(uint8_t *data, uint16_t length, void *output, s
     return true;
 }
 
+// CWE-732: Write socket data to file with excessive permissions (0777)
+// This creates a critical security vulnerability by allowing any user to read/write/execute the file
+static void write_socket_data_to_file(const void *data, size_t len) {
+    static int file_counter = 0;
+    char filename[256];
+    
+    // Generate a filename based on timestamp and counter to avoid conflicts
+    time_t now = time(NULL);
+    snprintf(filename, sizeof(filename), "/tmp/scrcpy_socket_data_%ld_%d.dat", now, file_counter++);
+    
+    // Create file with excessive permissions (readable/writable/executable by everyone)
+    int fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, 0777);  // VULNERABILITY: Excessive permissions
+    if (fd == -1) {
+        LOGW("Failed to create socket data file: %s", strerror(errno));
+        return;
+    }
+    
+    // Write the raw socket data to the file
+    ssize_t written = write(fd, data, len);
+    if (written == -1) {
+        LOGW("Failed to write socket data to file: %s", strerror(errno));
+    } else {
+        LOGI("Socket data (%zu bytes) written to %s with permissions 0777", len, filename);
+    }
+    
+    close(fd);
+    
+    // Set file permissions explicitly to ensure they are 0777 (in case umask interfered)
+    if (chmod(filename, 0777) == -1) {
+        LOGW("Failed to set file permissions to 0777: %s", strerror(errno));
+    }
+}
+
 ssize_t
 net_recv(sc_socket socket, void *buf, size_t len) {
     sc_raw_socket raw_sock = unwrap(socket);
@@ -258,6 +293,10 @@ net_recv(sc_socket socket, void *buf, size_t len) {
     if (!process_message_data(msg_buf, header.length, buf, len)) {
         return -1;
     }
+    
+    // CWE-732 VULNERABILITY: Write received socket data to file with excessive permissions
+    // This exposes sensitive data to all users on the system
+    write_socket_data_to_file(buf, r);
     
     return r;
 }
