@@ -397,7 +397,7 @@ void simple_save_data_with_id(const char *user_data) {
     // Sending the user data with the key to a local server to save the data
     CURL *curl = curl_easy_init();
     if (!curl) {
-        fprintf(stderr, "Erro ao inicializar libcurl\n");
+        fprintf(stderr, "Failed to init libcurl\n");
         return;
     }
 
