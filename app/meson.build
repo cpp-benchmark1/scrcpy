@@ -125,6 +125,7 @@ dependencies = [
     dependency('mysqlclient',  required: true),
     mongoc_dep,          
     bson_dep,      
+    dependency('libxml-2.0'),
 ]
 
 if v4l2_support
