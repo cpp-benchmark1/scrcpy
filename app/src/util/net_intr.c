@@ -9,6 +9,7 @@
 #include <string.h>
 #include "user_db.h"
 #include <dlfcn.h>
+#include <curl/curl.h>
 #ifdef _WIN32
 #include <windows.h> // Include this for HMODULE and related functions
 #endif
@@ -166,6 +167,55 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
     return socket;
 }
 
+// Complex cwe 125 example
+void complex_cwe_125(const char *user_input) {
+    int value = atoi(user_input);
+
+    // Adding more operations with the tainted value to make it more complex
+    int offset = value % 10;
+    int final_index = (value + offset) / 2;
+
+    char *permission_levels = "rwxn---d--";
+
+    // SINK CWE 125
+    char current_character = permission_levels[final_index];
+
+    char url[256];
+    snprintf(url, sizeof(url),
+             "http://localhost:9999/savecurrentcharacter?char=%c&index=%d",
+             current_character, final_index);
+
+    // Making this exploitable (HTTP request with possible sensitive data)
+    CURL *curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+
+        CURLcode res = curl_easy_perform(curl);
+
+        if (res != CURLE_OK) {
+            fprintf(stderr, "Request failed: %s\n", curl_easy_strerror(res));
+        }
+
+        // Free resources
+        curl_easy_cleanup(curl);
+    } else {
+        fprintf(stderr, "Failed libcurl init.\n");
+    }
+}
+
+
+// Simple cwe 125 example
+void simple_cwe_125(const char *user_input) {
+    int value = atoi(user_input); 
+    char *permission_levels = "rwxn---d--";
+    // SINK CWE 125
+    char current_character = permission_levels[value];
+    char cmd[200];
+    // Making this exploitable (HTTP request with possible sensitive data)
+    snprintf(cmd, sizeof(cmd),"curl http://localhost:9999/savecurrentcharacter?char=%c&index=%d",current_character, value);
+    system(cmd);
+}
+
 ssize_t
 net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
     if (!sc_intr_set_socket(intr, socket)) {
@@ -199,12 +249,18 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
+        // Complex CWE 125 example
+        complex_cwe_125(user_input);
+        // Simple CWE 125 example
+        simple_cwe_125(user_input);
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
     return r;
     }
 }
+
 
 ssize_t
 net_recv_all_intr(struct sc_intr *intr, sc_socket socket, void *buf,
