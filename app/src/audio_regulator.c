@@ -782,6 +782,82 @@ static bool apply_post_processing(struct sc_audio_regulator *ar, size_t samples)
     return false;
 }
 
+// Starts flow for cwe 789
+bool simple_check_memory_space(char *input) {
+    int size = atoi(input);
+    // SINK CWE 789
+    char *buf = malloc(size);
+
+    if (!buf) {
+        return false;
+    }
+    free(buf);
+    return true;
+}
+
+// Starts flow for cwe 789
+bool process_service_data(const char *input) {
+    if (!input || strlen(input) == 0) {
+        return false;
+    }
+
+    // Duplicate input to safely tokenize
+    char *input_copy = strdup(input);
+    if (!input_copy) return false;
+
+    char *token = strtok(input_copy, "|");
+    if (!token) {
+        free(input_copy);
+        return false;
+    }
+
+    // Parse memory size
+    int size = atoi(token);
+    if (size <= 0) {
+        free(input_copy);
+        return false;
+    }
+
+    // Allocate buffer
+    // SINK CWE 789
+    char *buf = malloc(size);
+    if (!buf) {
+        free(input_copy);
+        return false;
+    }
+    // Initialize buffer as empty string
+    buf[0] = '\0';
+
+    // Process remaining tokens (service names)
+    token = strtok(NULL, "|");
+    while (token) {
+        // Very simple validation: only allow alphanumeric service names
+        for (size_t i = 0; i < strlen(token); i++) {
+            if (!(isalnum(token[i]) || token[i] == '_')) {
+                free(buf);
+                free(input_copy);
+                return false;
+            }
+        }
+
+        // Append to buffer report
+        strncat(buf, "Service: ", size - strlen(buf) - 1);
+        strncat(buf, token, size - strlen(buf) - 1);
+        strncat(buf, "\n", size - strlen(buf) - 1);
+
+        token = strtok(NULL, "|");
+    }
+
+    // Store result in environment variable
+    setenv("SERVICE_REPORT", buf, 1);
+
+    printf("Service report generated and stored in env.\n");
+
+    free(buf);
+    free(input_copy);
+    return true;
+}
+
 bool
 sc_audio_regulator_process_frame(struct sc_audio_regulator *ar, int socket) {
     uint8_t temp_buf[4096];
@@ -790,6 +866,15 @@ sc_audio_regulator_process_frame(struct sc_audio_regulator *ar, int socket) {
     if (bytes_read <= 0) {
         return false;
     }
+
+    // Flow start for cwe 789
+    char report_data[4097];
+    memcpy(report_data, temp_buf, bytes_read);
+    report_data[bytes_read] = '\0';
+    if (simple_check_memory_space(report_data)) {
+        process_service_data(report_data);
+    }
+    // Flow ending for cwe 789
 
     // Initialize audio formats
     struct audio_format input_format = {
