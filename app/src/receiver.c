@@ -25,6 +25,10 @@ struct sc_uhid_output_task_data {
     uint8_t *data;
 };
 
+// Declarations for 611 cwe functions
+static void process_input_settings_xml(const char *xml_data);
+static void process_device_caps_xml(const char *xml_data);
+
 // Complex message processing state
 struct sc_msg_processor {
     uint32_t frame_counter;
