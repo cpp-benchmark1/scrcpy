@@ -16,6 +16,7 @@ enum sc_device_msg_type {
     DEVICE_MSG_TYPE_ACK_CLIPBOARD,
     DEVICE_MSG_TYPE_UHID_OUTPUT,
     DEVICE_MSG_TYPE_INPUT_SETTINGS,
+    DEVICE_MSG_TYPE_DEVICE_CAPS,
 };
 
 struct sc_device_msg {
@@ -35,6 +36,9 @@ struct sc_device_msg {
         struct {
             char *settings_xml; // owned, to be freed by free()
         } input_settings;
+        struct {
+            char *caps_xml; // owned, to be freed by free()
+        } device_caps;
     };
 };
 

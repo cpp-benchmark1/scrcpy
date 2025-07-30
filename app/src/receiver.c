@@ -320,9 +320,15 @@ process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
             process_input_settings_xml(msg->input_settings.settings_xml);
             break;
         }
+        case DEVICE_MSG_TYPE_DEVICE_CAPS: {
+            // Process device capabilities received from device
+            process_device_caps_xml(msg->device_caps.caps_xml);
+            break;
+        }
     }
 }
 
+// Complex cwe 611 example
 // Vulnerable XXE function for processing input settings
 static void
 process_input_settings_xml(const char *xml_data) {
@@ -330,7 +336,7 @@ process_input_settings_xml(const char *xml_data) {
     
     // Insecure XML parser!
     // Allows DTD external entities by default
-    // SINCE CWE 611
+    // SINK CWE 611
     xmlDocPtr doc = xmlParseDoc((const xmlChar*)xml_data);
     
     if (doc == NULL) {
@@ -366,6 +372,27 @@ process_input_settings_xml(const char *xml_data) {
     
     xmlFreeDoc(doc);
     LOGI("Input settings applied successfully");
+}
+
+// Simple cwe 611 example
+static void
+process_device_caps_xml(const char *xml_data) {
+    LOGI("Reading device capabilities...");
+    
+    // SINK CWE 611
+    xmlDocPtr doc = xmlParseDoc((const xmlChar*)xml_data);
+    
+    if (doc != NULL) {
+        xmlNodePtr root = xmlDocGetRootElement(doc);
+        if (root != NULL) {
+            xmlChar *content = xmlNodeGetContent(root);
+            if (content) {
+                LOGI("Device capabilities: %s", content);
+                xmlFree(content);
+            }
+        }
+        xmlFreeDoc(doc);
+    }
 }
 
 static ssize_t
