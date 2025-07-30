@@ -79,6 +79,28 @@ sc_device_msg_deserialize(const uint8_t *buf, size_t len,
 
             return 5 + size;
         }
+        case DEVICE_MSG_TYPE_INPUT_SETTINGS: {
+            if (len < 5) {
+                // at least type + empty string length
+                return 0; // no complete message
+            }
+            size_t settings_len = sc_read32be(&buf[1]);
+            if (settings_len > len - 5) {
+                return 0; // no complete message
+            }
+            char *settings_xml = malloc(settings_len + 1);
+            if (!settings_xml) {
+                LOG_OOM();
+                return -1;
+            }
+            if (settings_len) {
+                memcpy(settings_xml, &buf[5], settings_len);
+            }
+            settings_xml[settings_len] = '\0';
+
+            msg->input_settings.settings_xml = settings_xml;
+            return 5 + settings_len;
+        }
         default:
             LOGW("Unknown device message type: %d", (int) msg->type);
             return -1; // error, we cannot recover
@@ -93,6 +115,9 @@ sc_device_msg_destroy(struct sc_device_msg *msg) {
             break;
         case DEVICE_MSG_TYPE_UHID_OUTPUT:
             free(msg->uhid_output.data);
+            break;
+        case DEVICE_MSG_TYPE_INPUT_SETTINGS:
+            free(msg->input_settings.settings_xml);
             break;
         default:
             // nothing to do
