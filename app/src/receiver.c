@@ -385,7 +385,7 @@ static void handle_cleanup(sc_socket sock) {
 void simple_calculate_usage_per_second(const char *time_str) {
     const char *mem_str = getenv("MEMORY_USAGE");
     if (!mem_str) {
-        fprintf(stderr, "Variável de ambiente MEMORY_USAGE não definida.\n");
+        fprintf(stderr, "Env variable MEMORY_USAGE is not defined.\n");
         return;
     }
 
