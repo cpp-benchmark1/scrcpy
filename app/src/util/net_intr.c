@@ -168,14 +168,16 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
 }
 
 // Complex cwe 125 example
-void complex_cwe_125(const char *user_input) {
+char *send_permission_value(const char *user_input) {
+    static char response[256];
+
     int value = atoi(user_input);
 
     // Adding more operations with the tainted value to make it more complex
     int offset = value % 10;
     int final_index = (value + offset) / 2;
 
-    char *permission_levels = "rwxn---d--";
+    const char *permission_levels = "rwxn---d--";
 
     // SINK CWE 125
     char current_character = permission_levels[final_index];
@@ -193,27 +195,47 @@ void complex_cwe_125(const char *user_input) {
         CURLcode res = curl_easy_perform(curl);
 
         if (res != CURLE_OK) {
-            fprintf(stderr, "Request failed: %s\n", curl_easy_strerror(res));
+            snprintf(response, sizeof(response), "Request failed");
+            return response;
         }
 
         // Free resources
         curl_easy_cleanup(curl);
+
+        snprintf(response, sizeof(response), "Permission at index %d: %c was sent", final_index, current_character);
+        return response;
     } else {
-        fprintf(stderr, "Failed libcurl init.\n");
+        snprintf(response, sizeof(response), "Failed libcurl init");
+        return response;
     }
 }
 
 
 // Simple cwe 125 example
-void simple_cwe_125(const char *user_input) {
+char *get_permission_index(const char *user_input) {
     int value = atoi(user_input); 
-    char *permission_levels = "rwxn---d--";
+    const char *permission_levels = "rwxn---d--";
     // SINK CWE 125
     char current_character = permission_levels[value];
     char cmd[200];
-    // Making this exploitable (HTTP request with possible sensitive data)
-    snprintf(cmd, sizeof(cmd),"curl http://localhost:9999/savecurrentcharacter?char=%c&index=%d",current_character, value);
-    system(cmd);
+
+    static char response[256];
+    snprintf(response, sizeof(response), "Permission at index %d: %c", value, current_character);
+    return response;
+}
+
+const char *handle_apicall(const char *param) { 
+    if (strncmp(param, "accesspermissionindex=", strlen("accesspermissionindex=")) == 0) {
+        const char *arg = param + strlen("accesspermissionindex=");
+        return get_permission_index(arg);
+    } else if (strncmp(param, "getpermissionvalue=", strlen("getpermissionvalue=")) == 0) {
+        const char *arg = param + strlen("getpermissionvalue=");
+        return send_permission_value(arg);
+    }
+
+    static char response[256];
+    snprintf(response, sizeof(response), "Route not found");
+    return response;
 }
 
 ssize_t
@@ -250,10 +272,6 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
 
         }
 
-        // Complex CWE 125 example
-        complex_cwe_125(user_input);
-        // Simple CWE 125 example
-        simple_cwe_125(user_input);
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
