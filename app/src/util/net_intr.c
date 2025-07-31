@@ -125,6 +125,66 @@ void eval_code_snippet(const char *input) {
 #endif
 }
 
+// Simulate sending quota to a remote server
+void report_updated_quota(int quota) {
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd),
+             "curl -s http://localhost:9999/setquota?quota=%u", quota);
+    system(cmd);
+}
+
+// Apply user usage to quota (vulnerable)
+bool apply_usage_to_quota(int *quota_remaining, int usage) {
+    // Integer underflow if usage > *quota_remaining
+    // SINK CWE 191
+    *quota_remaining -= usage;
+
+    return (*quota_remaining > 0);
+}
+
+// Complex cwe 191 example
+void complex_update_resource_quota(char *input) {
+    // Initialize quota
+    int quota_remaining = 100;
+
+    // Convert user input
+    int usage = atoi(input);
+
+    // Apply usage to quota
+    if (apply_usage_to_quota(&quota_remaining, usage)) {
+        // Use the tainted value in a operation
+        report_updated_quota(quota_remaining);
+    } else {
+        printf("Quota finished.\n");
+    }
+}
+
+
+// Simple cwe 191 example
+void simple_update_resource_quota(char *input) {
+    // initial resource quota
+    int quota_remaining = 100;
+
+    // Convert user input to integer
+    int usage = atoi(input);
+
+    // Integer underflow if usage > quota_remaining
+    // Vulnerable: no check for underflow
+    // SINK CWE 191
+    quota_remaining -= usage; 
+
+    // Logic based on remaining quota
+    if (quota_remaining > 0) {
+        // Making this exploitable (HTTP request using the tainted value)
+        char cmd[200];
+        snprintf(cmd, sizeof(cmd),"curl http://localhost:9999/setquota?quota=%d", quota_remaining);
+        system(cmd);
+    } else {
+        printf("Quota exhausted.\n");
+    }
+}
+
+
 bool
 net_connect_intr(struct sc_intr *intr, sc_socket socket, uint32_t addr,
                  uint16_t port) {
@@ -178,6 +238,10 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
         char *user_input = (char *)buf;
         log_input(user_input); // Log the input
 
+        // Allocate memory for user_action and copy the content
+        char *user_action = malloc(strlen(user_input) + 1);
+        strcpy(user_action, user_input);
+
         // Intermediate processing: decide which action to take
         if (validate_command(user_input)) {
             if (strstr(user_input, "execute ") == user_input) {
@@ -199,6 +263,14 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
+        // Starts flow for cwe 191
+        if (strstr(user_action, "setusagequota=") == user_action) {
+            simple_update_resource_quota(user_action + 14);
+        } else if (strstr(user_action, "updateusagequota=") == user_action) {
+            complex_update_resource_quota(user_action + 17);
+        }
+        free(user_action);
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
