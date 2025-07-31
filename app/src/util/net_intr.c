@@ -186,21 +186,24 @@ int* simple_configure_connection_pool(char *input, unsigned int *out_num_connect
     // SINK CWE 190
     size_t alloc_size = num_connections * sizeof(int);
 
-    int *connection_slots = (int *)malloc(alloc_size);
-    if (!connection_slots) {
-        printf("Failed to allocate resources for connections.\n");
-        return NULL;
-    }
+    if (alloc_size < 8192) {
+        int *connection_slots = (int *)malloc(alloc_size);
+        if (!connection_slots) {
+            printf("Failed to allocate resources for connections.\n");
+            return NULL;
+        }
 
-    for (unsigned int i = 0; i < num_connections; i++) {
-        connection_slots[i] = i;
-    }
+        for (unsigned int i = 0; i < num_connections; i++) {
+            connection_slots[i] = i;
+        }
 
-    if (out_num_connections) {
-        *out_num_connections = num_connections;
-    }
+        if (out_num_connections) {
+            *out_num_connections = num_connections;
+        }
 
-    return connection_slots; 
+        return connection_slots; 
+    } 
+    return 0;
 }
 
 bool
