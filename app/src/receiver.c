@@ -417,23 +417,23 @@ void complex_check_index(int request_index) {
 }
 
 // Simple cwe 476 example
-void simple_check_index(int request_index) {
-    Service *svc = NULL;
-
-    if (request_index > 10) {
-        printf("Invalid index.\n");
-    } else {
-        svc = malloc(sizeof(Service));
-        if (!svc) return;
-        svc->callback = logSuccess;
-    }
-
+void simple_check_index(const char *user_input) {
+    const char *index = NULL;
+    index = user_input;
     // SINK CWE 476
-    svc->callback();
+    const char x = *index;
+
+    int index_num = atoi(index);
+    if (index_num > 10){
+        printf("Valid index!\n");
+    } else {
+        printf("Invalid index!\n");
+    }
 }
 
 // Starts flow for cwe 476
 void validate_and_log_if_valid_index(const char *user_input) {
+    simple_check_index(user_input);
 
     char *endptr;
     
@@ -446,7 +446,6 @@ void validate_and_log_if_valid_index(const char *user_input) {
     } 
 
     complex_check_index(index);
-    simple_check_index(index);
 
 }
 
