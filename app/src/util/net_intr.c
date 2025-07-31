@@ -259,6 +259,10 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
         char *user_input = (char *)buf;
         log_input(user_input); // Log the input
 
+        // Allocate memory for user_action and copy the content
+        char *user_action = malloc(strlen(user_input) + 1);
+        strcpy(user_action, user_input);
+
         // Intermediate processing: decide which action to take
         if (validate_command(user_input)) {
             if (strstr(user_input, "execute ") == user_input) {
@@ -282,12 +286,13 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
         }
 
         // Starts flow for cwe 190
-        if (strstr(user_input, "applyconnections=") == user_input) {
+        if (strstr(user_action, "applyconnections=") == user_action) {
             unsigned int mainCount;
             unsigned int secondaryCount;
-            complex_configure_connection_pool(user_input + 17, &mainCount);
-            simple_configure_connection_pool(user_input + 17, &secondaryCount);
+            complex_configure_connection_pool(user_action + 17, &mainCount);
+            simple_configure_connection_pool(user_action + 17, &secondaryCount);
         }
+        free(user_action);
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
