@@ -42,7 +42,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo chmod +x ./install_release.sh
-          sudo apt install -y meson ninja-build nasm ffmpeg libsdl2-2.0-0 libsdl2-dev libavcodec-dev libavdevice-dev libavformat-dev libavutil-dev libswresample-dev libusb-1.0-0 libusb-1.0-0-dev libv4l-dev libmongoc-1.0-0 libmongoc-dev libbson-1.0-0 libbson-dev
+          sudo apt install -y meson ninja-build nasm ffmpeg libsdl2-2.0-0 libsdl2-dev libavcodec-dev libavdevice-dev libavformat-dev libavutil-dev libswresample-dev libusb-1.0-0 libusb-1.0-0-dev libv4l-dev libmongoc-1.0-0 libmongoc-dev libbson-1.0-0 libbson-dev libmysqlclient-dev libjson-c-dev libcurl4-openssl-dev
           coverity_tool/bin/cov-build --dir cov-int ./install_release.sh
       - name: Compress with bzip2
         run: |

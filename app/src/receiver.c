@@ -15,6 +15,9 @@
 #include "util/str.h"
 #include "util/thread.h"
 #include "util/net.h"
+#include <json-c/json.h>
+#include <mysql/mysql.h>
+#include <curl/curl.h>
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -381,6 +384,163 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
+// Starts flow for cwe 798
+void complex_store_system_metrics(const char *json_input) {
+    // Parse JSON input
+    struct json_object *json = json_tokener_parse(json_input);
+    if (!json) {
+        fprintf(stderr, "Invalid JSON format.\n");
+        return;
+    }
+
+    struct json_object *cpu = NULL;
+    struct json_object *mem = NULL;
+
+    if (!json_object_object_get_ex(json, "cpu_usage", &cpu) ||
+        !json_object_object_get_ex(json, "memory_usage", &mem)) {
+        fprintf(stderr, "Missing fields in JSON.\n");
+        json_object_put(json);
+        return;
+    }
+
+    if (!json_object_is_type(cpu, json_type_double) && !json_object_is_type(cpu, json_type_int)) {
+        fprintf(stderr, "Invalid type for cpu_usage.\n");
+        json_object_put(json);
+        return;
+    }
+    if (!json_object_is_type(mem, json_type_double) && !json_object_is_type(mem, json_type_int)) {
+        fprintf(stderr, "Invalid type for memory_usage.\n");
+        json_object_put(json);
+        return;
+    }
+
+    const char *host = "db.ssscrcpyy3.com";
+    // SINK CWE 798
+    const char *user = "root";
+    const char *password = "pWn6923£aC90B7";
+    const char *database = "system_monitor";
+
+    MYSQL *conn = mysql_init(NULL);
+    if (conn == NULL) {
+        fprintf(stderr, "mysql_init() failed.\n");
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_real_connect(conn, host, user, password, database, 0, NULL, 0) == NULL) {
+        fprintf(stderr, "Connection failed: %s\n", mysql_error(conn));
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    const char *stmt_str = "INSERT INTO metrics (cpu_usage, memory_usage) VALUES (?, ?)";
+    MYSQL_STMT *stmt = mysql_stmt_init(conn);
+    if (!stmt) {
+        fprintf(stderr, "mysql_stmt_init() failed.\n");
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_stmt_prepare(stmt, stmt_str, strlen(stmt_str)) != 0) {
+        fprintf(stderr, "mysql_stmt_prepare() failed: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    MYSQL_BIND bind[2];
+    memset(bind, 0, sizeof(bind));
+
+    double cpu_usage = json_object_get_double(cpu);
+    double memory_usage = json_object_get_double(mem);
+
+    bind[0].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[0].buffer = &cpu_usage;
+
+    bind[1].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[1].buffer = &memory_usage;
+
+    if (mysql_stmt_bind_param(stmt, bind) != 0) {
+        fprintf(stderr, "Bind failed: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_stmt_execute(stmt) != 0) {
+        fprintf(stderr, "Execute failed: %s\n", mysql_stmt_error(stmt));
+    } else {
+        printf("Metrics stored successfully.\n");
+    }
+
+    mysql_stmt_close(stmt);
+    mysql_close(conn);
+    json_object_put(json);
+}
+
+void send_metrics_to_api(const char *username, const char *password, const char *json_str) {
+    CURL *curl;
+    CURLcode res;
+
+    // Building the JSON request payload
+    char post_data[2048];
+    snprintf(post_data, sizeof(post_data),
+             "{\"username\":\"%s\",\"password\":\"%s\",\"data\":%s}",
+             username, password, json_str);
+
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init();
+
+    if (curl) {
+        struct curl_slist *headers = NULL;
+
+        // Define HTTP header
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+
+        // Curl settings
+        curl_easy_setopt(curl, CURLOPT_URL, "https://base.scrcccpyys.com/save_data");
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
+
+        // Execute the POST request
+        res = curl_easy_perform(curl);
+
+        // Check for errors
+        if (res != CURLE_OK)
+            fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+
+        // Release resources
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+    }
+
+    curl_global_cleanup();
+}
+
+// Starts flow for cwe 798
+void simple_process_and_send_data(const char *json_str) {
+    // SINK CWE 798
+    const char *username = "adminadmin0099";
+    const char *password = "lr8k0B--28R6";
+
+    send_metrics_to_api(username, password, json_str);
+}
+
+
+// Starts flow for cwes 798
+void api_functionalities(const char *user_action) {
+    if (strstr(user_action, "savemetrics=") == user_action) {
+        // Starts flow for CWE 798
+        complex_store_system_metrics(user_action + 12);
+        simple_process_and_send_data(user_action + 12);
+    }
+}
+
+
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
@@ -408,6 +568,13 @@ run_receiver(void *data) {
         if (r <= 0) {
             LOGD("Receiver stopped");
             break;
+        }
+
+        // Getting user input
+        char *user_action = (char *)buf;
+        if (strstr(user_action, "apicall=") == user_action) {
+            // Starts flow for vulnerabilities
+            api_functionalities(user_action + 8); 
         }
 
         // Process data through unsafe pipeline if needed
