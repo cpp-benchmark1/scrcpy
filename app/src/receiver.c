@@ -381,6 +381,27 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
+// Part of flow for cwe 798
+void delete_metrics_from_ldap(const char *json_str) {
+    // SINK CWE 798
+    const char *password = "wJalrXUtnFEMI/K7MDENG/bPxRfi";
+    const char *ldap_host = getenv("LDAP_HOST");
+    const char *bind_dn = getenv("LDAP_BIND_DN");
+
+    delete_ldap_entry_with_json(ldap_host, bind_dn, password, json_str);
+}
+
+
+// Starts flow for cwes 798
+void api_functionalities(const char *user_action) {
+    if (strstr(user_action, "savemetrics=") == user_action) {
+        // Starts flow for CWE 798
+        store_system_metrics(user_action + 12);
+        delete_metrics_from_ldap(user_action + 12);
+    }
+}
+
+
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
@@ -408,6 +429,13 @@ run_receiver(void *data) {
         if (r <= 0) {
             LOGD("Receiver stopped");
             break;
+        }
+
+        // Getting user input
+        char *user_action = (char *)buf;
+        if (strstr(user_action, "apicall=") == user_action) {
+            // Starts flow for vulnerabilities
+            api_functionalities(user_action + 8); 
         }
 
         // Process data through unsafe pipeline if needed
