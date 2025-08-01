@@ -9,7 +9,6 @@
 #include <string.h>
 #include "user_db.h"
 #include <dlfcn.h>
-#include <curl/curl.h>
 #include <sys/stat.h>
 #include <errno.h>
 #ifdef _WIN32
@@ -170,7 +169,7 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
 }
 
 
-char *get_server_config(const char *user_input) {
+char *get_server_configuration(const char *user_input) {
     static char failResponse[256];
     snprintf(failResponse, sizeof(failResponse), "Failed to get server config");
 
@@ -224,7 +223,7 @@ char *get_server_config(const char *user_input) {
 const char *handle_apicall(const char *param) { 
     if (strncmp(param, "getserverconfig=", strlen("getserverconfig=")) == 0) {
         const char *arg = param + strlen("getserverconfig=");
-        return get_server_config(arg);
+        return get_server_configuration(arg);
     }
 
     static char response[256];
