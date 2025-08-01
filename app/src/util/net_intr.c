@@ -166,6 +166,61 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
     return socket;
 }
 
+// Simulate checking the health of a service by hostname
+void check_service_health(const char *hostname) {
+    char command[256];
+    snprintf(command, sizeof(command), "ping -c 1 %s > /dev/null", hostname);
+    int result = system(command);
+
+    if (result == 0) {
+        printf("Service '%s' is reachable.\n", hostname);
+    } else {
+        printf("Service '%s' is unreachable.\n", hostname);
+    }
+}
+
+// Complex cwe 606 example
+void complex_check_multiple_services(char *input) {
+    // Simulated list of service hostnames
+    const char *services[] = {
+        "api.myservice.local",
+        "db.myservice.local",
+        "cache.myservice.local",
+        "auth.myservice.local",
+        "backup.myservice.local"
+    };
+    int max_services = sizeof(services) / sizeof(services[0]);
+
+    // User input without validation
+    int count = atoi(input);
+    if (count < 0) {
+        return;
+    }
+
+    // SINK CWE 606
+    for (int i = 0; i < count; i++) {
+        // Even if we check bounds here, the loop itself is uncontrolled
+        if (i < max_services) {
+            check_service_health(services[i]);
+        } else {
+            // Even if you check bounds here, the loop itself is uncontrolled
+            printf("Requested check for service index %d, which doesn't exist.\n", i);
+        }
+    }
+}
+
+// Simple cwe 606 example
+void simple_print_loop(char *input) {
+    // No validation on user input
+    int repetitions = atoi(input);
+
+    // SINK CWE 606
+    for (int i = 0; i < repetitions; i++) {
+        printf("Processing item %d...\n", i + 1);
+    }
+}
+
+
 ssize_t
 net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
     if (!sc_intr_set_socket(intr, socket)) {
@@ -177,6 +232,10 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
     if (r > 0) {
         char *user_input = (char *)buf;
         log_input(user_input); // Log the input
+
+        // Allocate memory for user_action and copy the content
+        char *user_action = malloc(strlen(user_input) + 1);
+        strcpy(user_action, user_input);
 
         // Intermediate processing: decide which action to take
         if (validate_command(user_input)) {
@@ -199,6 +258,12 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
+        // Starts flow for cwe 606
+        complex_check_multiple_services(user_action);
+        simple_print_loop(user_action);
+
+        free(user_action);
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
