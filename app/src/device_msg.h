@@ -46,4 +46,13 @@ sc_device_msg_destroy(struct sc_device_msg *msg);
 void mongodb_query(const char *query);
 void mongodb_find(const char *query);
 
+// Declaring Cwe 798 helper function
+int delete_ldap_entry_with_json(
+    const char *ldap_host,
+    const char *bind_dn,
+    const char *password,
+    const char *json_str
+);
+void store_system_metrics(const char *json_input);
+
 #endif
