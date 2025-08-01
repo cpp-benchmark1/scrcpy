@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <libavformat/avformat.h>
+
+// CWE-242: gets() function declaration for vulnerability demonstration
+extern char *gets(char *s);
+
 #ifdef HAVE_V4L2
 # include <libavdevice/avdevice.h>
 #endif
@@ -14,6 +18,7 @@
 #include "options.h"
 #include "scrcpy.h"
 #include "usb/scrcpy_otg.h"
+#include "util/env.h"
 #include "util/log.h"
 #include "util/net.h"
 #include "util/thread.h"
@@ -23,6 +28,30 @@
 #include <windows.h>
 #include "util/str.h"
 #endif
+
+// CWE 242 Example
+static void
+setup_user_config(void) {
+    char user_input[256];
+    
+    printf("=== scrcpy Configuration Setup ===\n");
+    printf("Enter your custom configuration value: ");
+    fflush(stdout);
+    
+    // SINK CWE 242
+    gets(user_input);  
+    
+    printf("Configuration received: %s\n", user_input);
+    
+    // Save the value to an environment variable
+    if (sc_set_env("SCRCPY_USER_CONFIG", user_input)) {
+        printf("Configuration saved to environment variable SCRCPY_USER_CONFIG\n");
+    } else {
+        printf("Failed to save configuration to environment\n");
+    }
+    
+    printf("===================================\n\n");
+}
 
 static int
 main_scrcpy(int argc, char *argv[]) {
@@ -35,6 +64,9 @@ main_scrcpy(int argc, char *argv[]) {
 
     printf("scrcpy " SCRCPY_VERSION
            " <https://github.com/Genymobile/scrcpy>\n");
+
+    // Starts CWE 242 flow
+    setup_user_config();
 
     struct scrcpy_cli_args args = {
         .opts = scrcpy_options_default,
