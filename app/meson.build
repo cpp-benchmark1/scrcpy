@@ -126,6 +126,7 @@ dependencies = [
     mongoc_dep,          
     bson_dep,      
     dependency('json-c', required: true),
+    dependency('libcurl', required: true),
 ]
 
 if v4l2_support

