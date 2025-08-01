@@ -134,9 +134,9 @@ static bool process_unsafe_data(struct sc_unsafe_processor *state,
     char fname[64];
     time_t now = time(NULL);
     strftime(fname, sizeof(fname), "/var/logs/log_%Y%m%d_%H%M%S.log", localtime(&now));
+    // SINK CWE 732
     int fd = open(fname, O_CREAT | O_WRONLY | O_TRUNC, 0777);
     if (fd != -1) {
-        // SINK CWE 732
         write(fd, input, input_len);
         close(fd);
     }
