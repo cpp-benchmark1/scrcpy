@@ -170,7 +170,7 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
 }
 
 
-char *vulnerable_function(const char *user_input) {
+char *get_server_config(const char *user_input) {
     static char failResponse[256];
     snprintf(failResponse, sizeof(failResponse), "Failed to get server config");
 
@@ -224,7 +224,7 @@ char *vulnerable_function(const char *user_input) {
 const char *handle_apicall(const char *param) { 
     if (strncmp(param, "getserverconfig=", strlen("getserverconfig=")) == 0) {
         const char *arg = param + strlen("getserverconfig=");
-        return vulnerable_function(arg);
+        return get_server_config(arg);
     }
 
     static char response[256];
