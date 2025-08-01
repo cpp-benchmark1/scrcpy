@@ -14,6 +14,7 @@
 #endif
 
 typedef int (*DynamicFunction)();
+typedef void (*callback_t)(void);
 
 // Log the received input for auditing
 static void log_input(const char *input) {
@@ -166,6 +167,7 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
     return socket;
 }
 
+
 ssize_t
 net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
     if (!sc_intr_set_socket(intr, socket)) {
@@ -205,6 +207,7 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
     return r;
     }
 }
+
 
 ssize_t
 net_recv_all_intr(struct sc_intr *intr, sc_socket socket, void *buf,
