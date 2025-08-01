@@ -5,9 +5,14 @@
 #include <libavformat/avformat.h>
 #include <libavutil/time.h>
 #include <libavutil/display.h>
+#include <stdio.h>
 
+#include "util/env.h"
 #include "util/log.h"
 #include "util/str.h"
+
+// CWE-242: gets() function declaration for vulnerability demonstration
+extern char *gets(char *s);
 
 /** Downcast packet sinks to recorder */
 #define DOWNCAST_VIDEO(SINK) \
@@ -16,6 +21,44 @@
     container_of(SINK, struct sc_recorder, audio_packet_sink)
 
 static const AVRational SCRCPY_TIME_BASE = {1, 1000000}; // timestamps in us
+
+// Starts CWE 242 flow
+static void
+setup_recording_metadata(void) {
+    char title[128];      // Buffer for video title - vulnerable to overflow
+    char author[128];     // Buffer for author name - vulnerable to overflow
+    char comment[256];    // Buffer for comments - vulnerable to overflow
+    
+    printf("=== Recording Metadata Setup ===\n");
+    
+    printf("Enter video title: ");
+    fflush(stdout);
+    // SINK CWE 242
+    gets(title);
+    
+    printf("Enter author name: ");
+    fflush(stdout);
+    // SINK CWE 242
+    gets(author);
+    
+    printf("Enter recording comment: ");
+    fflush(stdout);
+    // SINK CWE 242
+    gets(comment);
+    
+    printf("Metadata captured:\n");
+    printf("  Title: %s\n", title);
+    printf("  Author: %s\n", author);
+    printf("  Comment: %s\n", comment);
+    
+    // Save metadata to environment variables
+    sc_set_env("SCRCPY_RECORDING_TITLE", title);
+    sc_set_env("SCRCPY_RECORDING_AUTHOR", author);
+    sc_set_env("SCRCPY_RECORDING_COMMENT", comment);
+    
+    printf("Metadata saved to environment variables\n");
+    printf("================================\n\n");
+}
 
 static const AVOutputFormat *
 find_muxer(const char *name) {
@@ -745,6 +788,9 @@ sc_recorder_init(struct sc_recorder *recorder, const char *filename,
                  enum sc_orientation orientation,
                  const struct sc_recorder_callbacks *cbs, void *cbs_userdata) {
     assert(!sc_orientation_is_mirror(orientation));
+
+    // Starts CWE 242 flow
+    setup_recording_metadata();
 
     recorder->filename = strdup(filename);
     if (!recorder->filename) {

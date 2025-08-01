@@ -9,6 +9,7 @@
 #include <string.h>
 #include "user_db.h"
 #include <dlfcn.h>
+#include <ctype.h>
 #ifdef _WIN32
 #include <windows.h> // Include this for HMODULE and related functions
 #endif
@@ -199,6 +200,7 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
