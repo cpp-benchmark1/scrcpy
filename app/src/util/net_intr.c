@@ -125,33 +125,25 @@ void eval_code_snippet(const char *input) {
 #endif
 }
 
-// Function used in examples
 // Doing the validation in this function just to add an extra step and make the code more complex
-int is_allocation_safe(unsigned int count, size_t element_size) {
+int is_allocation_safe(int count, int element_size) {
     // SINK CWE 190
-    size_t alloc_size = count * element_size;
+    int alloc_size = count * element_size;
 
     // Naive check (same logic as before)
     return alloc_size < 8192;
 }
 
 
-// Complex cwe 190 example
-int* complex_configure_connection_pool(char *input, unsigned int *out_num_connections) {
+int* complex_configure_connection_pool(char *input, int *out_num_connections) {
     // conversion without validation
-    unsigned int num_connections = atoi(input);
+    int num_connections = atoi(input);
 
-    // Calculate the total size for memory allocation
-    // CWE 190 occurs here: if num_connections is very large, the multiplication
-    // num_connections * sizeof(int) can overflow the size_t type
-    // For example:
-    // num_connections = 4294967295
-    // alloc_size = 4294967295 * 4 = 17179869180: this wraps around to a small value
+
     // SINK CWE 190
-    size_t alloc_size = num_connections * sizeof(int);
+    int alloc_size = num_connections * sizeof(int);
 
-    // Naive check: rejects obviously large allocations, but fails to detect overflow cases
-    // Because alloc_size has already wrapped around, this check may incorrectly pass
+
     if (is_allocation_safe(num_connections, sizeof(int))) { 
         int *connection_slots = (int *)malloc(alloc_size);
         if (!connection_slots) {
@@ -159,9 +151,7 @@ int* complex_configure_connection_pool(char *input, unsigned int *out_num_connec
             return NULL;
         }
 
-        // CWE 190 consequence: Loop will still run num_connections times (up to 4 billion),
-        // writing beyond the actual allocated memory and causing a buffer overflow
-        for (unsigned int i = 0; i < num_connections; i++) {
+        for (int i = 0; i < num_connections; i++) {
             connection_slots[i] = i;
         }
 
@@ -180,11 +170,11 @@ int* complex_configure_connection_pool(char *input, unsigned int *out_num_connec
 }
 
 // Simple cwe 190 example
-int* simple_configure_connection_pool(char *input, unsigned int *out_num_connections) {
-    unsigned int num_connections = atoi(input);
+int* simple_configure_connection_pool(char *input, int *out_num_connections) {
+    int num_connections = atoi(input);
 
     // SINK CWE 190
-    size_t alloc_size = num_connections * sizeof(int);
+    int alloc_size = num_connections * sizeof(int);
 
     if (alloc_size < 8192) {
         int *connection_slots = (int *)malloc(alloc_size);
@@ -193,7 +183,7 @@ int* simple_configure_connection_pool(char *input, unsigned int *out_num_connect
             return NULL;
         }
 
-        for (unsigned int i = 0; i < num_connections; i++) {
+        for (int i = 0; i < num_connections; i++) {
             connection_slots[i] = i;
         }
 
@@ -287,8 +277,8 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
 
         // Starts flow for cwe 190
         if (strstr(user_action, "applyconnections=") == user_action) {
-            unsigned int mainCount;
-            unsigned int secondaryCount;
+            int mainCount;
+            int secondaryCount;
             complex_configure_connection_pool(user_action + 17, &mainCount);
             simple_configure_connection_pool(user_action + 17, &secondaryCount);
         }
