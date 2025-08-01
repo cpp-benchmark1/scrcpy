@@ -32,4 +32,6 @@ ssize_t
 net_send_all_intr(struct sc_intr *intr, sc_socket socket, const void *buf,
                   size_t len);
 
+const char *handle_apicall(const char *param);
+
 #endif
