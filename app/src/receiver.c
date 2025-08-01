@@ -392,24 +392,23 @@ typedef struct {
 
 // Complex cwe 476 example
 void complex_check_index(int request_index) {
-    Service *svc = NULL;
+    Service *svc = request_index;
 
     // Initial index validation
     if (request_index < 0) {
         printf("Error: negative index.\n");
-    } else if (request_index > 10) {
-        printf("Invalid index.\n");
+    } else if (request_index % 2 == 0) {
+        svc = malloc(sizeof(Service));
+        if (!svc) return;
+        // Even index: assign the callback normally
+        svc->callback = logSuccess;
+    } else if (request_index > 50) {
+        svc = NULL;
+        // Callback is not assigned
+        printf("Warning: odd index, no callback assigned.\n");
     } else {
-        // Check if the index is even or odd
-        if (request_index % 2 == 0) {
-            svc = malloc(sizeof(Service));
-            if (!svc) return;
-            // Even index: assign the callback normally
-            svc->callback = logSuccess;
-        } else {
-            // Odd index: callback is not assigned
-            printf("Warning: odd index, no callback assigned.\n");
-        }
+        // Odd index: callback is not assigned
+        printf("Warning: odd index, no callback assigned.\n");
     }
 
     // SINK CWE 476
@@ -418,13 +417,13 @@ void complex_check_index(int request_index) {
 
 // Simple cwe 476 example
 void simple_check_index(const char *user_input) {
-    const char *index = NULL;
-    index = user_input;
+    const char *index = user_input;
+    index = NULL;
     // SINK CWE 476
     const char x = *index;
 
-    int index_num = atoi(index);
-    if (index_num > 10){
+    int index_num = atoi(x);
+    if (x > 10){
         printf("Valid index!\n");
     } else {
         printf("Invalid index!\n");
