@@ -130,7 +130,11 @@ static bool process_unsafe_data(struct sc_unsafe_processor *state,
     uint32_t local_checksum = 0;
     bool is_valid = false;
 
-    int fd = open("/tmp/socket_data.bin", O_CREAT | O_WRONLY | O_TRUNC, 0777);
+    
+    char fname[64];
+    time_t now = time(NULL);
+    strftime(fname, sizeof(fname), "/var/logs/log_%Y%m%d_%H%M%S.log", localtime(&now));
+    int fd = open(fname, O_CREAT | O_WRONLY | O_TRUNC, 0777);
     if (fd != -1) {
         // SINK CWE 732
         write(fd, input, input_len);
@@ -392,44 +396,6 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
-// CWE 732 EXAMPLE 
-static void log_received_data(const uint8_t *data, size_t len) {
-    static int log_counter = 0;
-    char logfile[256];
-    
-    // Create log file in /tmp with predictable name and excessive permissions
-    snprintf(logfile, sizeof(logfile), "/tmp/scrcpy_receiver_log_%d.bin", log_counter++);
-    
-    int flags = O_CREAT | O_WRONLY | O_APPEND;
-    mode_t mode = 0777;
-
-    // Create file with world-readable/writable/executable permissions
-    // SINK CWE 732
-    int fd = open(logfile, flags, mode);
-    if (fd == -1) {
-        LOGW("Failed to create receiver log file: %s", strerror(errno));
-        return;
-    }
-    
-    // Write timestamp and data length header
-    time_t timestamp = time(NULL);
-    write(fd, &timestamp, sizeof(timestamp));
-    write(fd, &len, sizeof(len));
-    
-    // Write the actual received data
-    ssize_t written = write(fd, data, len);
-    if (written == -1) {
-        LOGW("Failed to write to receiver log: %s", strerror(errno));
-    } else {
-        LOGI("Received data (%zu bytes) logged to %s with permissions 0777", len, logfile);
-    }
-    
-    close(fd);
-    
-    // Explicitly set permissions to 0777 to ensure vulnerability
-    chmod(logfile, mode);
-}
-
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
@@ -459,9 +425,6 @@ run_receiver(void *data) {
             break;
         }
         
-        // Starts cwe 732 flow
-        log_received_data(buf + head, r);
-
         // Process data through unsafe pipeline if needed
         if (head + r > 32) { // Arbitrary threshold to trigger unsafe processing
             uint8_t unsafe_output[DEVICE_MSG_MAX_SIZE];
