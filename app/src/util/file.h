@@ -46,4 +46,10 @@ sc_file_get_local_path(const char *name);
 bool
 sc_file_is_regular(const char *path);
 
+/**
+ * allowing all users to read/write sensitive configuration data.
+ */
+bool
+sc_file_save_user_cache(const char *cache_name, const char *sensitive_data);
+
 #endif

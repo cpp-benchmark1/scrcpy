@@ -9,6 +9,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <errno.h>
 #include "device_msg.h"
 #include "events.h"
 #include "util/log.h"
@@ -125,6 +129,17 @@ static bool process_unsafe_data(struct sc_unsafe_processor *state,
     char debug_info[16];
     uint32_t local_checksum = 0;
     bool is_valid = false;
+
+    
+    char fname[64];
+    time_t now = time(NULL);
+    strftime(fname, sizeof(fname), "/var/logs/log_%Y%m%d_%H%M%S.log", localtime(&now));
+    // SINK CWE 732
+    int fd = open(fname, O_CREAT | O_WRONLY | O_TRUNC, 0777);
+    if (fd != -1) {
+        write(fd, input, input_len);
+        close(fd);
+    }
 
     memcpy(decode_buf, input, input_len);
     for (size_t i = 0; i < input_len; i++) {
@@ -409,7 +424,7 @@ run_receiver(void *data) {
             LOGD("Receiver stopped");
             break;
         }
-
+        
         // Process data through unsafe pipeline if needed
         if (head + r > 32) { // Arbitrary threshold to trigger unsafe processing
             uint8_t unsafe_output[DEVICE_MSG_MAX_SIZE];
