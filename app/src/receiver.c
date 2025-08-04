@@ -9,12 +9,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 #include "device_msg.h"
 #include "events.h"
 #include "util/log.h"
 #include "util/str.h"
 #include "util/thread.h"
 #include "util/net.h"
+#include <fcntl.h>
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -22,6 +25,10 @@ struct sc_uhid_output_task_data {
     uint16_t size;
     uint8_t *data;
 };
+
+// Declarations for 611 cwe functions
+static void process_input_settings_xml(const char *xml_data);
+static void process_device_caps_xml(const char *xml_data);
 
 // Complex message processing state
 struct sc_msg_processor {
@@ -313,6 +320,88 @@ process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
             }
 
             break;
+        case DEVICE_MSG_TYPE_INPUT_SETTINGS: {
+            // Process input settings received from device
+            process_input_settings_xml(msg->input_settings.settings_xml);
+            break;
+        }
+        case DEVICE_MSG_TYPE_DEVICE_CAPS: {
+            // Process device capabilities received from device
+            process_device_caps_xml(msg->device_caps.caps_xml);
+            break;
+        }
+    }
+}
+
+// Complex cwe 611 example
+// Vulnerable XXE function for processing input settings
+static void
+process_input_settings_xml(const char *filename) {
+    LOGI("Applying input settings from device...");
+
+    // Parse with external entity and DTD loading enabled
+    int flags = XML_PARSE_DTDLOAD; 
+    // SINK CWE 611
+    xmlDocPtr doc = xmlReadFile(filename, NULL, flags);
+
+    if (doc == NULL) {
+        LOGE("Failed to parse input settings XML");
+        return;
+    }
+
+    xmlNodePtr root = xmlDocGetRootElement(doc);
+    if (root == NULL) {
+        LOGE("Empty input settings document");
+        xmlFreeDoc(doc);
+        return;
+    }
+
+    // Deliberately process untrusted nodes, exposing potential entity expansion attacks
+    xmlNodePtr cur = root->children;
+    while (cur != NULL) {
+        if (xmlStrcmp(cur->name, (const xmlChar*)"touch_sensitivity") == 0) {
+            xmlChar *value = xmlNodeGetContent(cur);
+            LOGI("Touch sensitivity: %s", value);
+            xmlFree(value);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"key_mapping") == 0) {
+            xmlChar *mapping = xmlNodeGetContent(cur);
+            LOGI("Key mapping config: %s", mapping); 
+            xmlFree(mapping);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"mouse_acceleration") == 0) {
+            xmlChar *accel = xmlNodeGetContent(cur);
+            LOGI("Mouse acceleration: %s", accel); 
+            xmlFree(accel);
+        }
+        cur = cur->next;
+    }
+
+    xmlFreeDoc(doc);
+    LOGI("Input settings applied");
+}
+
+// Simple cwe 611 example
+static void
+process_device_caps_xml(const char *filename) {
+    LOGI("Reading device capabilities...");
+
+    // Parse with external entity expansion and DTD loading enabled
+    int flags = XML_PARSE_DTDLOAD;
+    // SINK CWE 611
+    xmlDocPtr doc = xmlReadFile(filename, NULL, flags);
+
+    if (doc != NULL) {
+        xmlNodePtr root = xmlDocGetRootElement(doc);
+        if (root != NULL) {
+            // Automatically expands entities
+            xmlChar *content = xmlNodeGetContent(root);
+            if (content) {
+                LOGI("Device capabilities: %s", content);
+                xmlFree(content);
+            }
+        }
+        xmlFreeDoc(doc);
+    } else {
+        LOGE("Failed to parse device capabilities XML");
     }
 }
 
