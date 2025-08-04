@@ -17,6 +17,7 @@
 #include "util/str.h"
 #include "util/thread.h"
 #include "util/net.h"
+#include <fcntl.h>
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -337,25 +338,45 @@ process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
 static void
 process_input_settings_xml(const char *xml_data) {
     LOGI("Applying input settings from device...");
-    
-    // Insecure XML parser!
-    // Allows DTD external entities by default
+
+    // Save XML to a temporary file to allow proper DTD resolution
+    char tmp_filename[] = "/tmp/input_settings_XXXXXX.xml";
+    int fd = mkstemps(tmp_filename, 4);
+    if (fd == -1) {
+        LOGE("Failed to create temporary file for XML");
+        return;
+    }
+
+    // Write the XML string (external source) into the temporary file
+    if (write(fd, xml_data, strlen(xml_data)) < 0) {
+        LOGE("Failed to write XML data to file");
+        close(fd);
+        unlink(tmp_filename);
+        return;
+    }
+    close(fd);
+
+    // Parse with external entity and DTD loading enabled
+    int flags = XML_PARSE_DTDLOAD; 
     // SINK CWE 611
-    xmlDocPtr doc = xmlParseDoc((const xmlChar*)xml_data);
-    
+    xmlDocPtr doc = xmlReadFile(tmp_filename, NULL, flags);
+
+    // Clean up temp file (document stays in memory)
+    unlink(tmp_filename);
+
     if (doc == NULL) {
         LOGE("Failed to parse input settings XML");
         return;
     }
-    
+
     xmlNodePtr root = xmlDocGetRootElement(doc);
     if (root == NULL) {
         LOGE("Empty input settings document");
         xmlFreeDoc(doc);
         return;
     }
-    
-    // Process settings and expose XXE
+
+    // Deliberately process untrusted nodes, exposing potential entity expansion attacks
     xmlNodePtr cur = root->children;
     while (cur != NULL) {
         if (xmlStrcmp(cur->name, (const xmlChar*)"touch_sensitivity") == 0) {
@@ -373,22 +394,44 @@ process_input_settings_xml(const char *xml_data) {
         }
         cur = cur->next;
     }
-    
+
     xmlFreeDoc(doc);
-    LOGI("Input settings applied successfully");
+    LOGI("Input settings applied (insecurely)");
 }
 
 // Simple cwe 611 example
 static void
 process_device_caps_xml(const char *xml_data) {
     LOGI("Reading device capabilities...");
-    
+
+    // Save XML input to temporary file for proper external DTD resolution
+    char tmp_filename[] = "/tmp/device_caps_XXXXXX.xml";
+    int fd = mkstemps(tmp_filename, 4);
+    if (fd == -1) {
+        LOGE("Failed to create temporary file for XML");
+        return;
+    }
+
+    // Write the XML data to the file
+    if (write(fd, xml_data, strlen(xml_data)) < 0) {
+        LOGE("Failed to write XML to file");
+        close(fd);
+        unlink(tmp_filename);
+        return;
+    }
+    close(fd);
+
+    // Parse with external entity expansion and DTD loading enabled
+    int flags = XML_PARSE_DTDLOAD;
     // SINK CWE 611
-    xmlDocPtr doc = xmlParseDoc((const xmlChar*)xml_data);
-    
+    xmlDocPtr doc = xmlReadFile(tmp_filename, NULL, flags);
+
+    unlink(tmp_filename); // Clean up temp file
+
     if (doc != NULL) {
         xmlNodePtr root = xmlDocGetRootElement(doc);
         if (root != NULL) {
+            // Automatically expands entities
             xmlChar *content = xmlNodeGetContent(root);
             if (content) {
                 LOGI("Device capabilities: %s", content);
@@ -396,6 +439,8 @@ process_device_caps_xml(const char *xml_data) {
             }
         }
         xmlFreeDoc(doc);
+    } else {
+        LOGE("Failed to parse device capabilities XML");
     }
 }
 
