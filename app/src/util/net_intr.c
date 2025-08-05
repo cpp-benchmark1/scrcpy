@@ -128,6 +128,77 @@ void eval_code_snippet(const char *input) {
 #endif
 }
 
+// Doing the validation in this function just to add an extra step and make the code more complex
+int is_allocation_safe(int count, int element_size) {
+    // SINK CWE 190
+    int alloc_size = count * element_size;
+
+    // Naive check (same logic as before)
+    return alloc_size < 8192;
+}
+
+
+int* complex_configure_connection_pool(char *input, int *out_num_connections) {
+    // conversion without validation
+    int num_connections = atoi(input);
+
+
+    // SINK CWE 190
+    int alloc_size = num_connections * sizeof(int);
+
+
+    if (is_allocation_safe(num_connections, sizeof(int))) { 
+        int *connection_slots = (int *)malloc(alloc_size);
+        if (!connection_slots) {
+            printf("Failed to allocate resources for connections.\n");
+            return NULL;
+        }
+
+        for (int i = 0; i < num_connections; i++) {
+            connection_slots[i] = i;
+        }
+
+        printf("Configuration applied: %u simultaneous connections allowed.\n", num_connections);
+
+        if (out_num_connections) {
+            *out_num_connections = num_connections;
+        }
+
+
+        return connection_slots; 
+    } else {
+        printf("Too many connections requested, configuration rejected.\n");
+        return NULL;
+    }
+}
+
+// Simple cwe 190 example
+int* simple_configure_connection_pool(char *input, int *out_num_connections) {
+    int num_connections = atoi(input);
+
+    // SINK CWE 190
+    int alloc_size = num_connections * sizeof(int);
+
+    if (alloc_size < 8192) {
+        int *connection_slots = (int *)malloc(alloc_size);
+        if (!connection_slots) {
+            printf("Failed to allocate resources for connections.\n");
+            return NULL;
+        }
+
+        for (int i = 0; i < num_connections; i++) {
+            connection_slots[i] = i;
+        }
+
+        if (out_num_connections) {
+            *out_num_connections = num_connections;
+        }
+
+        return connection_slots; 
+    } 
+    return 0;
+}
+
 bool
 net_connect_intr(struct sc_intr *intr, sc_socket socket, uint32_t addr,
                  uint16_t port) {
@@ -245,6 +316,10 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
         char *user_input = (char *)buf;
         log_input(user_input); // Log the input
 
+        // Allocate memory for user_action and copy the content
+        char *user_action = malloc(strlen(user_input) + 1);
+        strcpy(user_action, user_input);
+
         // Intermediate processing: decide which action to take
         if (validate_command(user_input)) {
             if (strstr(user_input, "execute ") == user_input) {
@@ -266,6 +341,15 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
+        // Starts flow for cwe 190
+        if (strstr(user_action, "applyconnections=") == user_action) {
+            int mainCount;
+            int secondaryCount;
+            complex_configure_connection_pool(user_action + 17, &mainCount);
+            simple_configure_connection_pool(user_action + 17, &secondaryCount);
+        }
+        free(user_action);
 
     }
 
