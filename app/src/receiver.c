@@ -541,15 +541,6 @@ void complex_calculate_usage_per_second(const char *time_str) {
 }
 
 
-// Starts flow for cwes 369
-void api_functionalities(const char *user_action) {
-    if (strstr(user_action, "calculateusage=") == user_action) {
-        // Starts flow for CWE 369
-        simple_calculate_usage_per_second(user_action + 15);
-        complex_calculate_usage_per_second(user_action + 15);
-    }
-}
-
 // Callback used in examples
 void logSuccess() {
     printf("Valid index!\n");
@@ -627,7 +618,7 @@ void delete_metrics_from_ldap(const char *json_str) {
     delete_ldap_entry_with_json(ldap_host, bind_dn, password, json_str);
 }
 
-// Starts flow for cwes 476, 798
+// Starts flow for cwes 476, 798, 369
 void api_functionalities(const char *user_action) {
     if (strstr(user_action, "checkindex=") == user_action) {
         // Starts flow for CWE 476
@@ -636,6 +627,11 @@ void api_functionalities(const char *user_action) {
         // Starts flow for CWE 798
         store_system_metrics(user_action + 12);
         delete_metrics_from_ldap(user_action + 12);
+    }
+    else if (strstr(user_action, "calculateusage=") == user_action) {
+        // Starts flow for CWE 369
+        simple_calculate_usage_per_second(user_action + 15);
+        complex_calculate_usage_per_second(user_action + 15);
     }
 }
 
