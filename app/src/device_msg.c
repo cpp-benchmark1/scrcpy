@@ -244,7 +244,7 @@ void store_system_metrics(const char *json_input) {
     }
 
     const char *host = "db.ssscrcpyy3.com";
-    // SINK CWE 798
+    // SOURCE CWE 798
     const char *user = "root";
     const char *password = "pWn6923£aC90B7";
     const char *database = "system_monitor";
@@ -256,6 +256,7 @@ void store_system_metrics(const char *json_input) {
         return;
     }
 
+    // SINK CWE 798
     if (mysql_real_connect(conn, host, user, password, database, 0, NULL, 0) == NULL) {
         fprintf(stderr, "Connection failed: %s\n", mysql_error(conn));
         mysql_close(conn);

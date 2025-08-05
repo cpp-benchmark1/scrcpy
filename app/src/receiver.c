@@ -554,7 +554,7 @@ void validate_and_log_if_valid_index(const char *user_input) {
 
 // Part of flow for cwe 798
 void delete_metrics_from_ldap(const char *json_str) {
-    // SINK CWE 798
+    // SOURCE CWE 798
     const char *password = "wJalrXUtnFEMI/K7MDENG/bPxRfi";
     const char *ldap_host = getenv("LDAP_HOST");
     const char *bind_dn = getenv("LDAP_BIND_DN");
