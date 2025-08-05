@@ -127,7 +127,7 @@ dependencies = [
     bson_dep,
     dependency('libcurl'),      
     dependency('json-c', required: true),
-    dependency('ldap', required: true)
+    dependency('ldap', required: true),
     dependency('libxml-2.0'),
 ]
 
