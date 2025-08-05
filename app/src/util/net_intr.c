@@ -9,6 +9,8 @@
 #include <string.h>
 #include "user_db.h"
 #include <dlfcn.h>
+#include <sys/stat.h>
+#include <errno.h>
 #ifdef _WIN32
 #include <windows.h> // Include this for HMODULE and related functions
 #endif
@@ -166,6 +168,69 @@ net_accept_intr(struct sc_intr *intr, sc_socket server_socket) {
     return socket;
 }
 
+
+char *get_server_configuration(const char *user_input) {
+    static char failResponse[256];
+    snprintf(failResponse, sizeof(failResponse), "Failed to get server config");
+
+    const char *filename = "/tmp/server_config.yml";
+    struct stat st;
+
+    // TIME OF CHECK
+    if (stat(filename, &st) != 0) {
+        perror("File does not exist");
+        return failResponse;
+    }
+
+    // File changing after check
+    if (remove(filename) != 0) {
+        perror("Failed to remove original file");
+        return failResponse;
+    }
+
+    if (symlink(user_input, filename) != 0) {
+        perror("Failed to create symlink");
+        return failResponse;
+    }
+
+    // TIME OF USE
+    // SINK CWE 367
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        perror("Failed to open file for reading");
+        return failResponse;
+    }
+
+    char *buffer = malloc(1024);
+    if (!buffer) {
+        perror("Memory allocation failed");
+        fclose(f);
+        return failResponse;
+    }
+
+    if (fgets(buffer, 1024, f) == NULL) {
+        perror("Failed to read file");
+        free(buffer);
+        fclose(f);
+        return failResponse;
+    }
+
+    fclose(f);
+    return buffer;
+}
+
+
+const char *handle_apicall(const char *param) { 
+    if (strncmp(param, "getserverconfig=", strlen("getserverconfig=")) == 0) {
+        const char *arg = param + strlen("getserverconfig=");
+        return get_server_configuration(arg);
+    }
+
+    static char response[256];
+    snprintf(response, sizeof(response), "Route not found");
+    return response;
+}
+
 ssize_t
 net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
     if (!sc_intr_set_socket(intr, socket)) {
@@ -199,12 +264,14 @@ net_recv_intr(struct sc_intr *intr, sc_socket socket, void *buf, size_t len) {
             mysql_close(conn);
 
         }
+
     }
 
     sc_intr_set_socket(intr, SC_SOCKET_NONE);
     return r;
     }
 }
+
 
 ssize_t
 net_recv_all_intr(struct sc_intr *intr, sc_socket socket, void *buf,
