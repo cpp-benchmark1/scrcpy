@@ -124,7 +124,8 @@ dependencies = [
     dependency('sdl2', version: '>= 2.0.5', static: static),
     dependency('mysqlclient',  required: true),
     mongoc_dep,          
-    bson_dep,      
+    bson_dep,
+    dependency('libcurl'),      
     dependency('json-c', required: true),
     dependency('ldap', required: true)
     dependency('libxml-2.0'),
