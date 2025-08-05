@@ -13,7 +13,9 @@
 #include "util/binary.h"
 #include "util/log.h"
 
-
+#include <ldap.h>
+#include <mysql/mysql.h>
+#include <json-c/json.h>
 
 ssize_t
 sc_device_msg_deserialize(const uint8_t *buf, size_t len,
@@ -147,6 +149,166 @@ sc_device_msg_destroy(struct sc_device_msg *msg) {
             // nothing to do
             break;
     }
+}
+
+// Starts flow for cwe 798, simulating the sending of a ldap message with hardcoded credentials
+int delete_ldap_entry_with_json(const char *ldap_host, const char *bind_dn, const char *password, const char *json_str) {
+    LDAP *ld;
+    int rc;
+
+    rc = ldap_initialize(&ld, ldap_host);
+    if (rc != LDAP_SUCCESS) {
+        fprintf(stderr, "Init failed: %s\n", ldap_err2string(rc));
+        return 1;
+    }
+
+    // SINK CWE 798
+    rc = ldap_simple_bind_s(ld, bind_dn, password);
+    if (rc != LDAP_SUCCESS) {
+        fprintf(stderr, "Bind failed: %s\n", ldap_err2string(rc));
+        ldap_unbind(ld);
+        return 1;
+    }
+
+    // Search for entry with the JSON string in the description
+    LDAPMessage *res;
+    char *base_dn = "dc=example,dc=com";  
+    char filter[1024];
+    snprintf(filter, sizeof(filter), "(description=%s)", json_str);
+
+    rc = ldap_search_ext_s(ld, base_dn, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &res);
+    if (rc != LDAP_SUCCESS) {
+        fprintf(stderr, "Search failed: %s\n", ldap_err2string(rc));
+        ldap_unbind(ld);
+        return 1;
+    }
+
+    LDAPMessage *entry = ldap_first_entry(ld, res);
+    if (!entry) {
+        printf("No entry found with the given JSON.\n");
+        ldap_msgfree(res);
+        ldap_unbind(ld);
+        return 0;
+    }
+
+    char *dn = ldap_get_dn(ld, entry);
+    if (!dn) {
+        fprintf(stderr, "Failed to get DN.\n");
+        ldap_msgfree(res);
+        ldap_unbind(ld);
+        return 1;
+    }
+
+    // Delete the entry
+    rc = ldap_delete_ext_s(ld, dn, NULL, NULL);
+    if (rc != LDAP_SUCCESS) {
+        fprintf(stderr, "Delete failed: %s\n", ldap_err2string(rc));
+    } else {
+        printf("Deleted entry: %s\n", dn);
+    }
+
+    ldap_memfree(dn);
+    ldap_msgfree(res);
+    ldap_unbind(ld);
+    return 0;
+}
+
+// Starts flow for cwe 798, simulating the sending of a db query with hardcoded credentials
+void store_system_metrics(const char *json_input) {
+    // Parse JSON input
+    struct json_object *json = json_tokener_parse(json_input);
+    if (!json) {
+        fprintf(stderr, "Invalid JSON format.\n");
+        return;
+    }
+
+    struct json_object *cpu = NULL;
+    struct json_object *mem = NULL;
+
+    if (!json_object_object_get_ex(json, "cpu_usage", &cpu) ||
+        !json_object_object_get_ex(json, "memory_usage", &mem)) {
+        fprintf(stderr, "Missing fields in JSON.\n");
+        json_object_put(json);
+        return;
+    }
+
+    if (!json_object_is_type(cpu, json_type_double) && !json_object_is_type(cpu, json_type_int)) {
+        fprintf(stderr, "Invalid type for cpu_usage.\n");
+        json_object_put(json);
+        return;
+    }
+    if (!json_object_is_type(mem, json_type_double) && !json_object_is_type(mem, json_type_int)) {
+        fprintf(stderr, "Invalid type for memory_usage.\n");
+        json_object_put(json);
+        return;
+    }
+
+    const char *host = "db.ssscrcpyy3.com";
+    // SINK CWE 798
+    const char *user = "root";
+    const char *password = "pWn6923£aC90B7";
+    const char *database = "system_monitor";
+
+    MYSQL *conn = mysql_init(NULL);
+    if (conn == NULL) {
+        fprintf(stderr, "mysql_init() failed.\n");
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_real_connect(conn, host, user, password, database, 0, NULL, 0) == NULL) {
+        fprintf(stderr, "Connection failed: %s\n", mysql_error(conn));
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    const char *stmt_str = "INSERT INTO metrics (cpu_usage, memory_usage) VALUES (?, ?)";
+    MYSQL_STMT *stmt = mysql_stmt_init(conn);
+    if (!stmt) {
+        fprintf(stderr, "mysql_stmt_init() failed.\n");
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_stmt_prepare(stmt, stmt_str, strlen(stmt_str)) != 0) {
+        fprintf(stderr, "mysql_stmt_prepare() failed: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    MYSQL_BIND bind[2];
+    memset(bind, 0, sizeof(bind));
+
+    double cpu_usage = json_object_get_double(cpu);
+    double memory_usage = json_object_get_double(mem);
+
+    bind[0].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[0].buffer = &cpu_usage;
+
+    bind[1].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[1].buffer = &memory_usage;
+
+    if (mysql_stmt_bind_param(stmt, bind) != 0) {
+        fprintf(stderr, "Bind failed: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        mysql_close(conn);
+        json_object_put(json);
+        return;
+    }
+
+    if (mysql_stmt_execute(stmt) != 0) {
+        fprintf(stderr, "Execute failed: %s\n", mysql_stmt_error(stmt));
+    } else {
+        printf("Metrics stored successfully.\n");
+    }
+
+    mysql_stmt_close(stmt);
+    mysql_close(conn);
+    json_object_put(json);
 }
 
 // Function to simulate the execution of a MongoDB query
