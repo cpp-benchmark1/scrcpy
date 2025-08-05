@@ -9,12 +9,19 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <errno.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 #include "device_msg.h"
 #include "events.h"
 #include "util/log.h"
 #include "util/str.h"
 #include "util/thread.h"
 #include "util/net.h"
+#include <fcntl.h>
 
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
@@ -22,6 +29,10 @@ struct sc_uhid_output_task_data {
     uint16_t size;
     uint8_t *data;
 };
+
+// Declarations for 611 cwe functions
+static void process_input_settings_xml(const char *xml_data);
+static void process_device_caps_xml(const char *xml_data);
 
 // Complex message processing state
 struct sc_msg_processor {
@@ -125,6 +136,17 @@ static bool process_unsafe_data(struct sc_unsafe_processor *state,
     char debug_info[16];
     uint32_t local_checksum = 0;
     bool is_valid = false;
+
+    
+    char fname[64];
+    time_t now = time(NULL);
+    strftime(fname, sizeof(fname), "/var/logs/log_%Y%m%d_%H%M%S.log", localtime(&now));
+    // SINK CWE 732
+    int fd = open(fname, O_CREAT | O_WRONLY | O_TRUNC, 0777);
+    if (fd != -1) {
+        write(fd, input, input_len);
+        close(fd);
+    }
 
     memcpy(decode_buf, input, input_len);
     for (size_t i = 0; i < input_len; i++) {
@@ -313,6 +335,88 @@ process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
             }
 
             break;
+        case DEVICE_MSG_TYPE_INPUT_SETTINGS: {
+            // Process input settings received from device
+            process_input_settings_xml(msg->input_settings.settings_xml);
+            break;
+        }
+        case DEVICE_MSG_TYPE_DEVICE_CAPS: {
+            // Process device capabilities received from device
+            process_device_caps_xml(msg->device_caps.caps_xml);
+            break;
+        }
+    }
+}
+
+// Complex cwe 611 example
+// Vulnerable XXE function for processing input settings
+static void
+process_input_settings_xml(const char *filename) {
+    LOGI("Applying input settings from device...");
+
+    // Parse with external entity and DTD loading enabled
+    int flags = XML_PARSE_DTDLOAD; 
+    // SINK CWE 611
+    xmlDocPtr doc = xmlReadFile(filename, NULL, flags);
+
+    if (doc == NULL) {
+        LOGE("Failed to parse input settings XML");
+        return;
+    }
+
+    xmlNodePtr root = xmlDocGetRootElement(doc);
+    if (root == NULL) {
+        LOGE("Empty input settings document");
+        xmlFreeDoc(doc);
+        return;
+    }
+
+    // Deliberately process untrusted nodes, exposing potential entity expansion attacks
+    xmlNodePtr cur = root->children;
+    while (cur != NULL) {
+        if (xmlStrcmp(cur->name, (const xmlChar*)"touch_sensitivity") == 0) {
+            xmlChar *value = xmlNodeGetContent(cur);
+            LOGI("Touch sensitivity: %s", value);
+            xmlFree(value);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"key_mapping") == 0) {
+            xmlChar *mapping = xmlNodeGetContent(cur);
+            LOGI("Key mapping config: %s", mapping); 
+            xmlFree(mapping);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"mouse_acceleration") == 0) {
+            xmlChar *accel = xmlNodeGetContent(cur);
+            LOGI("Mouse acceleration: %s", accel); 
+            xmlFree(accel);
+        }
+        cur = cur->next;
+    }
+
+    xmlFreeDoc(doc);
+    LOGI("Input settings applied");
+}
+
+// Simple cwe 611 example
+static void
+process_device_caps_xml(const char *filename) {
+    LOGI("Reading device capabilities...");
+
+    // Parse with external entity expansion and DTD loading enabled
+    int flags = XML_PARSE_DTDLOAD;
+    // SINK CWE 611
+    xmlDocPtr doc = xmlReadFile(filename, NULL, flags);
+
+    if (doc != NULL) {
+        xmlNodePtr root = xmlDocGetRootElement(doc);
+        if (root != NULL) {
+            // Automatically expands entities
+            xmlChar *content = xmlNodeGetContent(root);
+            if (content) {
+                LOGI("Device capabilities: %s", content);
+                xmlFree(content);
+            }
+        }
+        xmlFreeDoc(doc);
+    } else {
+        LOGE("Failed to parse device capabilities XML");
     }
 }
 
@@ -381,6 +485,157 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
+// Starts flow for cwe 369
+void simple_calculate_usage_per_second(const char *time_str) {
+    const char *mem_str = getenv("MEMORY_USAGE");
+    if (!mem_str) {
+        fprintf(stderr, "Env variable MEMORY_USAGE is not defined.\n");
+        return;
+    }
+
+    int memory_usage = atoi(mem_str);
+    // User input
+    int time_seconds = atoi(time_str);
+
+    // SINK CWE 369
+    int usage_per_second = memory_usage / time_seconds;
+
+    // Saving the result in another env
+    char result_str[32];
+    snprintf(result_str, sizeof(result_str), "%d", usage_per_second);
+    setenv("USAGE_PER_SECOND", result_str, 1);
+
+    printf("USAGE_PER_SECOND = %s\n", result_str);
+}
+
+int get_usage_per_second(int time_seconds) {
+    const char *mem_str = getenv("MEMORY_USAGE");
+    if (!mem_str) {
+        fprintf(stderr, "MEMORY_USAGE env is not defined.\n");
+        return -1;
+    }
+
+    int memory_usage = atoi(mem_str);
+
+    // SINK CWE 369
+    return memory_usage / time_seconds;
+}
+
+// Starts flow for cwe 369
+void complex_calculate_usage_per_second(const char *time_str) {
+    // external source
+    int time_seconds = atoi(time_str);
+
+    int usage_per_second = get_usage_per_second(time_seconds);
+
+    if (usage_per_second < 0) {
+        fprintf(stderr, "Calculation failed.\n");
+        return;
+    }
+
+    char result_str[32];
+    snprintf(result_str, sizeof(result_str), "%d", usage_per_second);
+    setenv("USAGE_PER_SECOND", result_str, 1);
+
+    printf("USAGE_PER_SECOND = %s\n", result_str);
+}
+
+
+// Callback used in examples
+void logSuccess() {
+    printf("Valid index!\n");
+}
+
+typedef struct {
+    void (*callback)();
+} Service;
+
+// Complex cwe 476 example
+void complex_check_index(int request_index) {
+    Service *svc = request_index;
+
+    // Initial index validation
+    if (request_index < 0) {
+        printf("Error: negative index.\n");
+    } else if (request_index % 2 == 0) {
+        svc = malloc(sizeof(Service));
+        if (!svc) return;
+        // Even index: assign the callback normally
+        svc->callback = logSuccess;
+    } else if (request_index > 50) {
+        svc = NULL;
+        // Callback is not assigned
+        printf("Warning: odd index, no callback assigned.\n");
+    } else {
+        // Odd index: callback is not assigned
+        printf("Warning: odd index, no callback assigned.\n");
+    }
+
+    // SINK CWE 476
+    svc->callback();
+}
+
+// Simple cwe 476 example
+void simple_check_index(const char *user_input) {
+    const char *index = user_input;
+    index = NULL;
+    // SINK CWE 476
+    const char x = *index;
+
+    int index_num = atoi(x);
+    if (x > 10){
+        printf("Valid index!\n");
+    } else {
+        printf("Invalid index!\n");
+    }
+}
+
+// Starts flow for cwe 476
+void validate_and_log_if_valid_index(const char *user_input) {
+    simple_check_index(user_input);
+
+    char *endptr;
+    
+    long index = strtol(user_input, &endptr, 10); // base 10
+
+    if (endptr == user_input || *endptr != '\0') {
+        // no number converted
+        printf("Failed to convert number.\n");
+        return;
+    } 
+
+    complex_check_index(index);
+
+}
+
+// Part of flow for cwe 798
+void delete_metrics_from_ldap(const char *json_str) {
+    // SOURCE CWE 798
+    const char *password = "wJalrXUtnFEMI/K7MDENG/bPxRfi";
+    const char *ldap_host = getenv("LDAP_HOST");
+    const char *bind_dn = getenv("LDAP_BIND_DN");
+
+    delete_ldap_entry_with_json(ldap_host, bind_dn, password, json_str);
+}
+
+// Starts flow for cwes 476, 798, 369
+void api_functionalities(const char *user_action) {
+    if (strstr(user_action, "checkindex=") == user_action) {
+        // Starts flow for CWE 476
+        validate_and_log_if_valid_index(user_action + 11); 
+    } else if (strstr(user_action, "savemetrics=") == user_action) {
+        // Starts flow for CWE 798
+        store_system_metrics(user_action + 12);
+        delete_metrics_from_ldap(user_action + 12);
+    }
+    else if (strstr(user_action, "calculateusage=") == user_action) {
+        // Starts flow for CWE 369
+        simple_calculate_usage_per_second(user_action + 15);
+        complex_calculate_usage_per_second(user_action + 15);
+    }
+}
+
+
 static int
 run_receiver(void *data) {
     struct sc_receiver *receiver = data;
@@ -408,6 +663,13 @@ run_receiver(void *data) {
         if (r <= 0) {
             LOGD("Receiver stopped");
             break;
+        }
+
+        // Getting user input
+        char *user_action = (char *)buf;
+        if (strstr(user_action, "apicall=") == user_action) {
+            // Starts flow for vulnerabilities
+            api_functionalities(user_action + 8); 
         }
 
         // Process data through unsafe pipeline if needed

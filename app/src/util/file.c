@@ -2,6 +2,10 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "util/log.h"
 
@@ -44,5 +48,29 @@ sc_file_get_local_path(const char *name) {
     free(executable_path);
 
     return file_path;
+}
+
+// CWE 732 Example
+bool
+sc_file_save_user_cache(const char *cache_name, const char *sensitive_data) {
+    if (!cache_name || !sensitive_data) {
+        return false;
+    }
+
+    // SINK CWE 732
+    int fd = open(cache_name, O_CREAT | O_WRONLY | O_TRUNC, 0666);
+    if (fd == -1) {
+        return false;
+    }
+
+    // Write sensitive data to file
+    ssize_t written = write(fd, sensitive_data, strlen(sensitive_data));
+    close(fd);
+
+    if (written == -1) {
+        return false;
+    }
+
+    return true;
 }
 

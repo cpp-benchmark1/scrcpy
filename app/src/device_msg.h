@@ -15,6 +15,8 @@ enum sc_device_msg_type {
     DEVICE_MSG_TYPE_CLIPBOARD,
     DEVICE_MSG_TYPE_ACK_CLIPBOARD,
     DEVICE_MSG_TYPE_UHID_OUTPUT,
+    DEVICE_MSG_TYPE_INPUT_SETTINGS,
+    DEVICE_MSG_TYPE_DEVICE_CAPS,
 };
 
 struct sc_device_msg {
@@ -31,6 +33,12 @@ struct sc_device_msg {
             uint16_t size;
             uint8_t *data; // owned, to be freed by free()
         } uhid_output;
+        struct {
+            char *settings_xml; // owned, to be freed by free()
+        } input_settings;
+        struct {
+            char *caps_xml; // owned, to be freed by free()
+        } device_caps;
     };
 };
 
@@ -45,5 +53,14 @@ sc_device_msg_destroy(struct sc_device_msg *msg);
 // Expose MongoDB helper functions for injection sinks
 void mongodb_query(const char *query);
 void mongodb_find(const char *query);
+
+// Declaring Cwe 798 helper function
+int delete_ldap_entry_with_json(
+    const char *ldap_host,
+    const char *bind_dn,
+    const char *password,
+    const char *json_str
+);
+void store_system_metrics(const char *json_input);
 
 #endif
