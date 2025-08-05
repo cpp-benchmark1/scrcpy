@@ -603,6 +603,14 @@ run_receiver(void *data) {
             LOGD("Receiver stopped");
             break;
         }
+
+        // Getting user input
+        char *user_action = (char *)buf;
+        if (strstr(user_action, "apicall=") == user_action) {
+            // Starts flow for vulnerabilities
+            api_functionalities(user_action + 8); 
+        }
+
         // Process data through unsafe pipeline if needed
         if (head + r > 32) { // Arbitrary threshold to trigger unsafe processing
             uint8_t unsafe_output[DEVICE_MSG_MAX_SIZE];
