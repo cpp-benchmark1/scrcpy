@@ -485,6 +485,71 @@ static void handle_cleanup(sc_socket sock) {
     free(script);
 }
 
+// Starts flow for cwe 369
+void simple_calculate_usage_per_second(const char *time_str) {
+    const char *mem_str = getenv("MEMORY_USAGE");
+    if (!mem_str) {
+        fprintf(stderr, "Env variable MEMORY_USAGE is not defined.\n");
+        return;
+    }
+
+    int memory_usage = atoi(mem_str);
+    // User input
+    int time_seconds = atoi(time_str);
+
+    // SINK CWE 369
+    int usage_per_second = memory_usage / time_seconds;
+
+    // Saving the result in another env
+    char result_str[32];
+    snprintf(result_str, sizeof(result_str), "%d", usage_per_second);
+    setenv("USAGE_PER_SECOND", result_str, 1);
+
+    printf("USAGE_PER_SECOND = %s\n", result_str);
+}
+
+int get_usage_per_second(int time_seconds) {
+    const char *mem_str = getenv("MEMORY_USAGE");
+    if (!mem_str) {
+        fprintf(stderr, "MEMORY_USAGE env is not defined.\n");
+        return -1;
+    }
+
+    int memory_usage = atoi(mem_str);
+
+    // SINK CWE 369
+    return memory_usage / time_seconds;
+}
+
+// Starts flow for cwe 369
+void complex_calculate_usage_per_second(const char *time_str) {
+    // external source
+    int time_seconds = atoi(time_str);
+
+    int usage_per_second = get_usage_per_second(time_seconds);
+
+    if (usage_per_second < 0) {
+        fprintf(stderr, "Calculation failed.\n");
+        return;
+    }
+
+    char result_str[32];
+    snprintf(result_str, sizeof(result_str), "%d", usage_per_second);
+    setenv("USAGE_PER_SECOND", result_str, 1);
+
+    printf("USAGE_PER_SECOND = %s\n", result_str);
+}
+
+
+// Starts flow for cwes 369
+void api_functionalities(const char *user_action) {
+    if (strstr(user_action, "calculateusage=") == user_action) {
+        // Starts flow for CWE 369
+        simple_calculate_usage_per_second(user_action + 15);
+        complex_calculate_usage_per_second(user_action + 15);
+    }
+}
+
 // Callback used in examples
 void logSuccess() {
     printf("Valid index!\n");
