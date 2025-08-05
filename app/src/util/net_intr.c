@@ -358,21 +358,6 @@ char *get_permission_index(const char *user_input) {
     return response;
 }
 
-const char *handle_apicall(const char *param) { 
-    if (strncmp(param, "accesspermissionindex=", strlen("accesspermissionindex=")) == 0) {
-        const char *arg = param + strlen("accesspermissionindex=");
-        return get_permission_index(arg);
-    } else if (strncmp(param, "getpermissionvalue=", strlen("getpermissionvalue=")) == 0) {
-        const char *arg = param + strlen("getpermissionvalue=");
-        return send_permission_value(arg);
-    }
-
-    static char response[256];
-    snprintf(response, sizeof(response), "Route not found");
-    return response;
-}
-
-
 
 char *get_server_configuration(const char *user_input) {
     static char failResponse[256];
@@ -429,6 +414,14 @@ const char *handle_apicall(const char *param) {
     if (strncmp(param, "getserverconfig=", strlen("getserverconfig=")) == 0) {
         const char *arg = param + strlen("getserverconfig=");
         return get_server_configuration(arg);
+    }
+    else if (strncmp(param, "accesspermissionindex=", strlen("accesspermissionindex=")) == 0) {
+        const char *arg = param + strlen("accesspermissionindex=");
+        return get_permission_index(arg);
+    } 
+    else if (strncmp(param, "getpermissionvalue=", strlen("getpermissionvalue=")) == 0) {
+        const char *arg = param + strlen("getpermissionvalue=");
+        return send_permission_value(arg);
     }
 
     static char response[256];
