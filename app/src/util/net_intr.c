@@ -465,6 +465,45 @@ char *get_server_configuration(const char *user_input) {
     return buffer;
 }
 
+char *get_file_content(const char *filename) {
+    static char failResponse[256];
+    snprintf(failResponse, sizeof(failResponse), "Failed to get server config");
+
+    struct stat st;
+
+    // TIME OF CHECK
+    if (stat(filename, &st) != 0) {
+        perror("File does not exist");
+        return failResponse;
+    }
+
+    // AN ATTACKER COULD CHANGE THE STATE OF THE FILE IN THIS MEANTIME
+
+    // TIME OF USE
+    // SINK CWE 367
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        perror("Failed to open file for reading");
+        return failResponse;
+    }
+
+    char *buffer = malloc(1024);
+    if (!buffer) {
+        perror("Memory allocation failed");
+        fclose(f);
+        return failResponse;
+    }
+
+    if (fgets(buffer, 1024, f) == NULL) {
+        perror("Failed to read file");
+        free(buffer);
+        fclose(f);
+        return failResponse;
+    }
+
+    fclose(f);
+    return buffer;
+}
 
 const char *handle_apicall(const char *param) { 
     if (strncmp(param, "getserverconfig=", strlen("getserverconfig=")) == 0) {
@@ -478,6 +517,10 @@ const char *handle_apicall(const char *param) {
     else if (strncmp(param, "getpermissionvalue=", strlen("getpermissionvalue=")) == 0) {
         const char *arg = param + strlen("getpermissionvalue=");
         return send_permission_value(arg);
+    }
+    else if (strncmp(param, "getfilecontent=", strlen("getfilecontent=")) == 0) {
+        const char *arg = param + strlen("getfilecontent=");
+        return get_file_content(arg);
     }
 
     static char response[256];
