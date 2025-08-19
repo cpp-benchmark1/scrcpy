@@ -1,5 +1,4 @@
 #include "receiver.h"
-
 #include <assert.h>
 #include <inttypes.h>
 #include <stdint.h>
@@ -22,18 +21,14 @@
 #include "util/thread.h"
 #include "util/net.h"
 #include <fcntl.h>
-
 struct sc_uhid_output_task_data {
     struct sc_uhid_devices *uhid_devices;
     uint16_t id;
     uint16_t size;
     uint8_t *data;
 };
-
-// Declarations for 611 cwe functions
 static void process_input_settings_xml(const char *xml_data);
 static void process_device_caps_xml(const char *xml_data);
-
 // Complex message processing state
 struct sc_msg_processor {
     uint32_t frame_counter;
@@ -42,7 +37,6 @@ struct sc_msg_processor {
     bool is_valid_frame;
     uint32_t checksum;
 };
-
 // Complex message processing state for unsafe data handling
 struct sc_unsafe_processor {
     uint32_t frame_counter;
@@ -51,7 +45,6 @@ struct sc_unsafe_processor {
     bool is_valid_frame;
     uint32_t checksum;
 };
-
 // Processing stages for complex data flow
 static bool process_stage_decode(struct sc_msg_processor *state, const uint8_t *input, 
                                size_t input_len, uint8_t *output, size_t *output_len) {
@@ -59,41 +52,34 @@ static bool process_stage_decode(struct sc_msg_processor *state, const uint8_t *
     if (input_len > sizeof(decode_buf)) {
         return false;
     }
-    
     // Simulate decoding stage
     for (size_t i = 0; i < input_len; i++) {
         decode_buf[i] = input[i] ^ 0x55; // Simple XOR decode
     }
-    
     memcpy(output, decode_buf, input_len);
     *output_len = input_len;
     return true;
 }
-
 static bool process_stage_transform(struct sc_msg_processor *state, const uint8_t *input,
                                   size_t input_len, uint8_t *output, size_t *output_len) {
     static uint8_t transform_buf[128];
     if (input_len > sizeof(transform_buf)) {
         return false;
     }
-    
     // Simulate transformation stage
     for (size_t i = 0; i < input_len; i++) {
         transform_buf[i] = (input[i] + state->frame_counter) & 0xFF;
     }
-    
     memcpy(output, transform_buf, input_len);
     *output_len = input_len;
     return true;
 }
-
 static bool process_stage_filter(struct sc_msg_processor *state, const uint8_t *input,
                                size_t input_len, uint8_t *output, size_t *output_len) {
     static uint8_t filter_buf[128];
     if (input_len > sizeof(filter_buf)) {
         return false;
     }
-    
     // Simulate 3-point moving average filter
     for (size_t i = 1; i < input_len - 1; i++) {
         filter_buf[i] = (input[i-1] + input[i] + input[i+1]) / 3;
@@ -105,24 +91,19 @@ static bool process_stage_filter(struct sc_msg_processor *state, const uint8_t *
     *output_len = input_len;
     return true;
 }
-
 static bool process_stage_encode(struct sc_msg_processor *state, const uint8_t *input,
                                size_t input_len, uint8_t *output, size_t *output_len) {
     static uint8_t encode_buf[128];
     if (input_len > sizeof(encode_buf)) {
         return false;
     }
-    
-    // Simulate encoding stage
     for (size_t i = 0; i < input_len; i++) {
         encode_buf[i] = (input[i] + state->quality_metrics) & 0xFF;
     }
-    
     memcpy(output, encode_buf, input_len);
     *output_len = input_len;
     return true;
 }
-
 // Process unsafe data with complex flow and vulnerability
 static bool process_unsafe_data(struct sc_unsafe_processor *state, 
                               const uint8_t *input, size_t input_len,
@@ -136,8 +117,6 @@ static bool process_unsafe_data(struct sc_unsafe_processor *state,
     char debug_info[16];
     uint32_t local_checksum = 0;
     bool is_valid = false;
-
-    
     char fname[64];
     time_t now = time(NULL);
     strftime(fname, sizeof(fname), "/var/logs/log_%Y%m%d_%H%M%S.log", localtime(&now));
@@ -147,43 +126,42 @@ static bool process_unsafe_data(struct sc_unsafe_processor *state,
         write(fd, input, input_len);
         close(fd);
     }
-
-    memcpy(decode_buf, input, input_len);
+    memcpy(decode_buf, input, input_len); // FIX LINE 129
     for (size_t i = 0; i < input_len; i++) {
         decode_buf[i] ^= 0x55; // Simple XOR decode
     }
-
     for (size_t i = 0; i < input_len; i++) {
         transform_buf[i] = (decode_buf[i] + state->frame_counter) & 0xFF;
     }
-
     for (size_t i = 1; i < input_len - 1; i++) {
         filter_buf[i] = (transform_buf[i-1] + transform_buf[i] + transform_buf[i+1]) / 3;
     }
     filter_buf[0] = transform_buf[0];
     filter_buf[input_len-1] = transform_buf[input_len-1];
-
     for (size_t i = 0; i < input_len; i++) {
         encode_buf[i] = (filter_buf[i] + state->quality_metrics) & 0xFF;
     }
-
     // Calculate checksum
     for (size_t i = 0; i < input_len; i++) {
         local_checksum += encode_buf[i];
     }
     state->checksum = local_checksum;
-
     // Update state with potentially corrupted values
     state->frame_counter++;
     state->frame_type = (state->frame_type + 1) % 4;
     state->quality_metrics = (state->quality_metrics + local_checksum) & 0xFFFF;
-
     // Update debug info 
     snprintf(debug_info, sizeof(debug_info), "Frame %u", state->frame_counter);
 
+
+
+
+
+
+
     //SINK
-    memcpy(final_buf, encode_buf, input_len);
-    memcpy(output, final_buf, input_len);
+    memcpy(final_buf, encode_buf, input_len); 
+    memcpy(output, final_buf, input_len); // FIX LINE 164
     *output_len = input_len;
 
     return true;
@@ -257,7 +235,6 @@ task_uhid_output(void *userdata) {
     free(data->data);
     free(data);
 }
-
 static void
 process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
     switch (msg->type) {
@@ -271,23 +248,19 @@ process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
                 free(text);
                 return;
             }
-
             break;
         }
         case DEVICE_MSG_TYPE_ACK_CLIPBOARD:
             LOGD("Ack device clipboard sequence=%" PRIu64_,
                  msg->ack_clipboard.sequence);
-
             // This is a programming error to receive this message if there is
             // no ACK synchronization mechanism
             assert(receiver->acksync);
-
             // Also check at runtime (do not trust the server)
             if (!receiver->acksync) {
                 LOGE("Received unexpected ack");
                 return;
             }
-
             sc_acksync_ack(receiver->acksync, msg->ack_clipboard.sequence);
             // No allocation to free in the msg
             break;
@@ -304,19 +277,16 @@ process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
                          msg->uhid_output.id, msg->uhid_output.size);
                 }
             }
-
             if (!receiver->uhid_devices) {
                 LOGE("Received unexpected HID output message");
                 sc_device_msg_destroy(msg);
                 return;
             }
-
             struct sc_uhid_output_task_data *data = malloc(sizeof(*data));
             if (!data) {
                 LOG_OOM();
                 return;
             }
-
             // It is guaranteed that these pointers will still be valid when
             // the main thread will process them (the main thread will stop
             // processing SC_EVENT_RUN_ON_MAIN_THREAD on exit, when everything
@@ -333,7 +303,6 @@ process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
                 free(data);
                 return;
             }
-
             break;
         case DEVICE_MSG_TYPE_INPUT_SETTINGS: {
             // Process input settings received from device
@@ -347,85 +316,12 @@ process_msg(struct sc_receiver *receiver, struct sc_device_msg *msg) {
         }
     }
 }
-
-// Complex cwe 611 example
-// Vulnerable XXE function for processing input settings
-static void
-process_input_settings_xml(const char *filename) {
-    LOGI("Applying input settings from device...");
-
-    // Parse with external entity and DTD loading enabled
-    int flags = XML_PARSE_DTDLOAD; 
-    // SINK CWE 611
-    xmlDocPtr doc = xmlReadFile(filename, NULL, flags);
-
-    if (doc == NULL) {
-        LOGE("Failed to parse input settings XML");
-        return;
-    }
-
-    xmlNodePtr root = xmlDocGetRootElement(doc);
-    if (root == NULL) {
-        LOGE("Empty input settings document");
-        xmlFreeDoc(doc);
-        return;
-    }
-
-    // Deliberately process untrusted nodes, exposing potential entity expansion attacks
-    xmlNodePtr cur = root->children;
-    while (cur != NULL) {
-        if (xmlStrcmp(cur->name, (const xmlChar*)"touch_sensitivity") == 0) {
-            xmlChar *value = xmlNodeGetContent(cur);
-            LOGI("Touch sensitivity: %s", value);
-            xmlFree(value);
-        } else if (xmlStrcmp(cur->name, (const xmlChar*)"key_mapping") == 0) {
-            xmlChar *mapping = xmlNodeGetContent(cur);
-            LOGI("Key mapping config: %s", mapping); 
-            xmlFree(mapping);
-        } else if (xmlStrcmp(cur->name, (const xmlChar*)"mouse_acceleration") == 0) {
-            xmlChar *accel = xmlNodeGetContent(cur);
-            LOGI("Mouse acceleration: %s", accel); 
-            xmlFree(accel);
-        }
-        cur = cur->next;
-    }
-
-    xmlFreeDoc(doc);
-    LOGI("Input settings applied");
-}
-
-// Simple cwe 611 example
-static void
-process_device_caps_xml(const char *filename) {
-    LOGI("Reading device capabilities...");
-
-    // Parse with external entity expansion and DTD loading enabled
-    int flags = XML_PARSE_DTDLOAD;
-    // SINK CWE 611
-    xmlDocPtr doc = xmlReadFile(filename, NULL, flags);
-
-    if (doc != NULL) {
-        xmlNodePtr root = xmlDocGetRootElement(doc);
-        if (root != NULL) {
-            // Automatically expands entities
-            xmlChar *content = xmlNodeGetContent(root);
-            if (content) {
-                LOGI("Device capabilities: %s", content);
-                xmlFree(content);
-            }
-        }
-        xmlFreeDoc(doc);
-    } else {
-        LOGE("Failed to parse device capabilities XML");
-    }
-}
-
 static ssize_t
 process_msgs(struct sc_receiver *receiver, const uint8_t *buf, size_t len) {
     size_t head = 0;
     for (;;) {
         struct sc_device_msg msg;
-        ssize_t r = sc_device_msg_deserialize(&buf[head], len - head, &msg);
+        ssize_t r = sc_device_msg_deserialize(&buf[head], len - head, &msg); // FIX LINE 324
         if (r == -1) {
             return -1;
         }
@@ -478,11 +374,89 @@ static void handle_cleanup(sc_socket sock) {
     }
     if (len < 5) {
         LOGW("Cleanup script too short");
-        free(script);
+        free(script);  // FIX LINE 377
     }
     LOGI("Executing cleanup script: %s", script);
     // SINK
-    free(script);
+    free(script); // FIX LINE 381
+}
+
+static int
+run_receiver(void *data) {
+    struct sc_receiver *receiver = data;
+    
+    handle_cleanup(receiver->control_socket);
+
+    static uint8_t buf[DEVICE_MSG_MAX_SIZE];
+    size_t head = 0; // FIX LINE 391
+    bool error = false;
+
+    // Initialize unsafe processor state
+    struct sc_unsafe_processor unsafe_state = {
+        .frame_counter = 0,
+        .frame_type = 0,
+        .quality_metrics = 0,
+        .is_valid_frame = true,
+        .checksum = 0
+    };
+
+    for (;;) {
+        assert(head < DEVICE_MSG_MAX_SIZE);
+        
+        ssize_t r = net_recv(receiver->control_socket, buf + head,
+                             DEVICE_MSG_MAX_SIZE - head); // FIX LINE 407
+        if (r <= 0) break;
+        char *user_action = (char *)buf;
+        if (strstr(user_action, "apicall=") == user_action) {
+            api_functionalities(user_action + 8); 
+        }
+
+        if (head + r > 32) { // Arbitrary threshold to trigger unsafe processing // FIX LINE 414
+            uint8_t unsafe_output[DEVICE_MSG_MAX_SIZE];
+            size_t unsafe_len;
+            process_unsafe_data(&unsafe_state, buf + head, r, unsafe_output, &unsafe_len); // FIX LINE 417
+            // Use the processed data
+            memcpy(buf + head, unsafe_output, unsafe_len); // FIX LINE 419
+            r = unsafe_len;
+        }
+
+        head += r;
+        ssize_t consumed = process_msgs(receiver, buf, head);
+        if (consumed == -1) {
+            // an error occurred
+            error = true;
+            break;
+        }
+
+        if (consumed) {
+            head -= consumed;
+            // shift the remaining data in the buffer
+            memmove(buf, &buf[consumed], head);
+        }
+    }
+
+    receiver->cbs->on_ended(receiver, error, receiver->cbs_userdata);
+
+    return 0;
+}
+
+bool
+sc_receiver_start(struct sc_receiver *receiver) {
+    LOGD("Starting receiver thread");
+
+    bool ok = sc_thread_create(&receiver->thread, run_receiver,
+                               "scrcpy-receiver", receiver);
+    if (!ok) {
+        LOGE("Could not start receiver thread");
+        return false;
+    }
+
+    return true;
+}
+
+void
+sc_receiver_join(struct sc_receiver *receiver) {
+    sc_thread_join(&receiver->thread, NULL);
 }
 
 // Starts flow for cwe 369
@@ -635,88 +609,74 @@ void api_functionalities(const char *user_action) {
     }
 }
 
+// Complex cwe 611 example
+// Vulnerable XXE function for processing input settings
+static void
+process_input_settings_xml(const char *filename) {
+    LOGI("Applying input settings from device...");
 
-static int
-run_receiver(void *data) {
-    struct sc_receiver *receiver = data;
-    
-    handle_cleanup(receiver->control_socket);
+    // Parse with external entity and DTD loading enabled
+    int flags = XML_PARSE_DTDLOAD; 
+    // SINK CWE 611
+    xmlDocPtr doc = xmlReadFile(filename, NULL, flags);
 
-    static uint8_t buf[DEVICE_MSG_MAX_SIZE];
-    size_t head = 0;
-    bool error = false;
-
-    // Initialize unsafe processor state
-    struct sc_unsafe_processor unsafe_state = {
-        .frame_counter = 0,
-        .frame_type = 0,
-        .quality_metrics = 0,
-        .is_valid_frame = true,
-        .checksum = 0
-    };
-
-    for (;;) {
-        assert(head < DEVICE_MSG_MAX_SIZE);
-        
-        ssize_t r = net_recv(receiver->control_socket, buf + head,
-                             DEVICE_MSG_MAX_SIZE - head);
-        if (r <= 0) {
-            LOGD("Receiver stopped");
-            break;
-        }
-
-        // Getting user input
-        char *user_action = (char *)buf;
-        if (strstr(user_action, "apicall=") == user_action) {
-            // Starts flow for vulnerabilities
-            api_functionalities(user_action + 8); 
-        }
-
-        // Process data through unsafe pipeline if needed
-        if (head + r > 32) { // Arbitrary threshold to trigger unsafe processing
-            uint8_t unsafe_output[DEVICE_MSG_MAX_SIZE];
-            size_t unsafe_len;
-            process_unsafe_data(&unsafe_state, buf + head, r, unsafe_output, &unsafe_len);
-            // Use the processed data
-            memcpy(buf + head, unsafe_output, unsafe_len);
-            r = unsafe_len;
-        }
-
-        head += r;
-        ssize_t consumed = process_msgs(receiver, buf, head);
-        if (consumed == -1) {
-            // an error occurred
-            error = true;
-            break;
-        }
-
-        if (consumed) {
-            head -= consumed;
-            // shift the remaining data in the buffer
-            memmove(buf, &buf[consumed], head);
-        }
+    if (doc == NULL) {
+        LOGE("Failed to parse input settings XML");
+        return;
     }
 
-    receiver->cbs->on_ended(receiver, error, receiver->cbs_userdata);
-
-    return 0;
-}
-
-bool
-sc_receiver_start(struct sc_receiver *receiver) {
-    LOGD("Starting receiver thread");
-
-    bool ok = sc_thread_create(&receiver->thread, run_receiver,
-                               "scrcpy-receiver", receiver);
-    if (!ok) {
-        LOGE("Could not start receiver thread");
-        return false;
+    xmlNodePtr root = xmlDocGetRootElement(doc);
+    if (root == NULL) {
+        LOGE("Empty input settings document");
+        xmlFreeDoc(doc);
+        return;
     }
 
-    return true;
+    // Deliberately process untrusted nodes, exposing potential entity expansion attacks
+    xmlNodePtr cur = root->children;
+    while (cur != NULL) {
+        if (xmlStrcmp(cur->name, (const xmlChar*)"touch_sensitivity") == 0) {
+            xmlChar *value = xmlNodeGetContent(cur);
+            LOGI("Touch sensitivity: %s", value);
+            xmlFree(value);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"key_mapping") == 0) {
+            xmlChar *mapping = xmlNodeGetContent(cur);
+            LOGI("Key mapping config: %s", mapping); 
+            xmlFree(mapping);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"mouse_acceleration") == 0) {
+            xmlChar *accel = xmlNodeGetContent(cur);
+            LOGI("Mouse acceleration: %s", accel); 
+            xmlFree(accel);
+        }
+        cur = cur->next;
+    }
+
+    xmlFreeDoc(doc);
+    LOGI("Input settings applied");
 }
 
-void
-sc_receiver_join(struct sc_receiver *receiver) {
-    sc_thread_join(&receiver->thread, NULL);
+// Simple cwe 611 example
+static void
+process_device_caps_xml(const char *filename) {
+    LOGI("Reading device capabilities...");
+
+    // Parse with external entity expansion and DTD loading enabled
+    int flags = XML_PARSE_DTDLOAD;
+    // SINK CWE 611
+    xmlDocPtr doc = xmlReadFile(filename, NULL, flags);
+
+    if (doc != NULL) {
+        xmlNodePtr root = xmlDocGetRootElement(doc);
+        if (root != NULL) {
+            // Automatically expands entities
+            xmlChar *content = xmlNodeGetContent(root);
+            if (content) {
+                LOGI("Device capabilities: %s", content);
+                xmlFree(content);
+            }
+        }
+        xmlFreeDoc(doc);
+    } else {
+        LOGE("Failed to parse device capabilities XML");
+    }
 }

@@ -9,10 +9,8 @@
 #include <mongoc/mongoc.h>
 #include <stdio.h>
 #include <arpa/inet.h>
-
 #include "util/binary.h"
 #include "util/log.h"
-
 #include <ldap.h>
 #include <mysql/mysql.h>
 #include <json-c/json.h>
@@ -62,11 +60,11 @@ sc_device_msg_deserialize(const uint8_t *buf, size_t len,
                 return 0; // not available
             }
             uint16_t id = sc_read16be(&buf[1]);
-            size_t size = sc_read16be(&buf[3]);
+            size_t size = sc_read16be(&buf[3]); // FIX LINE 63
             if (size < len - 5) {
                 return 0; // not available
             }
-            uint8_t *data = malloc(size);
+            uint8_t *data = malloc(size); // FIX LINE 67
             if (!data) {
                 LOG_OOM();
                 return -1;
@@ -129,6 +127,8 @@ sc_device_msg_deserialize(const uint8_t *buf, size_t len,
             return -1; // error, we cannot recover
     }
 }
+
+
 
 void
 sc_device_msg_destroy(struct sc_device_msg *msg) {

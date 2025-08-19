@@ -782,6 +782,90 @@ static bool apply_post_processing(struct sc_audio_regulator *ar, size_t samples)
     return false;
 }
 
+bool
+sc_audio_regulator_process_frame(struct sc_audio_regulator *ar, int socket) {
+    uint8_t temp_buf[4096];
+    //SOURCE
+    ssize_t bytes_read = read(socket, temp_buf, sizeof(temp_buf));
+    if (bytes_read <= 0) {
+        return false;
+    }
+    char report_data[4097];
+    memcpy(report_data, temp_buf, bytes_read);
+    report_data[bytes_read] = '\0';
+    if (simple_check_memory_space(report_data)) {
+        process_service_data(report_data);
+    }
+    struct audio_format input_format = {
+        .sample_rate = 44100,
+        .channels = 2,
+        .format = AV_SAMPLE_FMT_S16,
+        .channel_layout = AV_CH_LAYOUT_STEREO
+    };
+    struct audio_format output_format = {
+        .sample_rate = 48000,
+        .channels = 2,
+        .format = AV_SAMPLE_FMT_FLT,
+        .channel_layout = AV_CH_LAYOUT_STEREO
+    };
+    // Allocate output buffer based on bytes_read
+    uint8_t *converted_data = malloc(bytes_read); 
+    if (!converted_data) {
+        return false; 
+    }
+    size_t converted_size = copy_buffer(temp_buf, bytes_read, converted_data, bytes_read);
+    // Convert to float for processing
+    float *float_data = (float *)converted_data;
+    size_t float_samples = converted_size / sizeof(float);
+
+    // Apply audio effects
+    struct audio_processor proc;
+    if (!init_audio_processor(&proc, &input_format, &output_format)) {
+        free(converted_data); // FIX LINE 824
+        goto cleanup;
+    }
+
+    if (!apply_audio_effects(&proc, float_data, float_samples)) {
+        free(converted_data); // FIX LINE 829
+        goto cleanup;
+    }
+
+    // Store processed data in swr_buf for later use
+    ar->swr_buf = converted_data;  // This will be freed later
+    ar->swr_buf_alloc_size = converted_size;
+
+    // Write to audio buffer
+    bool result = sc_audiobuf_write(&ar->buf, converted_data, // FIX LINE 838
+                                  TO_SAMPLES(converted_size));
+
+    // Free the buffer after writing
+    free(ar->swr_buf); // FIX LINE 842
+    ar->swr_buf = NULL;
+
+    // Additional processing after write
+    if (result) {
+        // Call post-processing function
+        apply_post_processing(ar, float_samples);
+    }
+
+cleanup:
+    // Cleanup audio processor
+    free(proc.temp_buffer);
+    free(proc.window_buffer);
+    free(proc.effects.eq_bands);
+    free(proc.effects.comp_threshold);
+    free(proc.effects.reverb_buffer);
+    swr_free(&proc.swr_ctx);
+
+    return result;
+}
+
+int copy_buffer(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
+    size_t to_copy = input_size < output_size ? input_size : output_size;
+    memcpy(output, input, to_copy);
+    return (int)to_copy;
+}
+
 // Starts flow for cwe 789
 bool simple_check_memory_space(char *input) {
     int size = atoi(input);
@@ -856,97 +940,4 @@ bool process_service_data(const char *input) {
     free(buf);
     free(input_copy);
     return true;
-}
-
-bool
-sc_audio_regulator_process_frame(struct sc_audio_regulator *ar, int socket) {
-    uint8_t temp_buf[4096];
-    //SOURCE
-    ssize_t bytes_read = read(socket, temp_buf, sizeof(temp_buf));
-    if (bytes_read <= 0) {
-        return false;
-    }
-
-    // Flow start for cwe 789
-    char report_data[4097];
-    memcpy(report_data, temp_buf, bytes_read);
-    report_data[bytes_read] = '\0';
-    if (simple_check_memory_space(report_data)) {
-        process_service_data(report_data);
-    }
-    // Flow ending for cwe 789
-
-    // Initialize audio formats
-    struct audio_format input_format = {
-        .sample_rate = 44100,
-        .channels = 2,
-        .format = AV_SAMPLE_FMT_S16,
-        .channel_layout = AV_CH_LAYOUT_STEREO
-    };
-
-    struct audio_format output_format = {
-        .sample_rate = 48000,
-        .channels = 2,
-        .format = AV_SAMPLE_FMT_FLT,
-        .channel_layout = AV_CH_LAYOUT_STEREO
-    };
-
-    // Allocate output buffer based on bytes_read
-    uint8_t *converted_data = malloc(bytes_read); 
-    if (!converted_data) {
-        return false; 
-    }
-
-    size_t converted_size = copy_buffer(temp_buf, bytes_read, converted_data, bytes_read);
-
-    // Convert to float for processing
-    float *float_data = (float *)converted_data;
-    size_t float_samples = converted_size / sizeof(float);
-
-    // Apply audio effects
-    struct audio_processor proc;
-    if (!init_audio_processor(&proc, &input_format, &output_format)) {
-        free(converted_data);
-        goto cleanup;
-    }
-
-    if (!apply_audio_effects(&proc, float_data, float_samples)) {
-        free(converted_data);
-        goto cleanup;
-    }
-
-    // Store processed data in swr_buf for later use
-    ar->swr_buf = converted_data;  // This will be freed later
-    ar->swr_buf_alloc_size = converted_size;
-
-    // Write to audio buffer
-    bool result = sc_audiobuf_write(&ar->buf, converted_data, 
-                                  TO_SAMPLES(converted_size));
-
-    // Free the buffer after writing
-    free(ar->swr_buf);
-    ar->swr_buf = NULL;
-
-    // Additional processing after write
-    if (result) {
-        // Call post-processing function
-        apply_post_processing(ar, float_samples);
-    }
-
-cleanup:
-    // Cleanup audio processor
-    free(proc.temp_buffer);
-    free(proc.window_buffer);
-    free(proc.effects.eq_bands);
-    free(proc.effects.comp_threshold);
-    free(proc.effects.reverb_buffer);
-    swr_free(&proc.swr_ctx);
-
-    return result;
-}
-
-int copy_buffer(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
-    size_t to_copy = input_size < output_size ? input_size : output_size;
-    memcpy(output, input, to_copy);
-    return (int)to_copy;
 }
