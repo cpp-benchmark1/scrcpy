@@ -67,5 +67,8 @@ sc_audio_regulator_push(struct sc_audio_regulator *ar, const AVFrame *frame);
 void
 sc_audio_regulator_pull(struct sc_audio_regulator *ar, uint8_t *out,
                         uint32_t samples);
+                        
+bool simple_check_memory_space(char *input);
+bool process_service_data(const char *input);
 
 #endif
