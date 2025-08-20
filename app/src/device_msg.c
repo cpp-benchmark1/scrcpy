@@ -244,8 +244,8 @@ void store_system_metrics(const char *json_input) {
     }
 
     const char *host = "db.ssscrcpyy3.com";
-    // SOURCE CWE 798
     const char *user = "root";
+    // SOURCE CWE 798
     const char *password = "pWn6923£aC90B7";
     const char *database = "system_monitor";
 
